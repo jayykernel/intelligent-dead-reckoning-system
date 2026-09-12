@@ -23,9 +23,9 @@ See `docs/ARCHITECTURE.md` for the full mathematical specification.
 | Phase | Description | Status |
 |---|---|---|
 | Phase 0 | Project Audit & Documentation | ✅ Complete |
-| Phase 1 | Project Infrastructure | 🔲 Not Started |
-| Phase 2–6 | Core Navigation (Sensors → EKF) | 🔲 Not Started |
-| Phase 7–13 | Intelligence Layer (GNSS, Vibration, ML, Vehicles) | 🔲 Not Started |
+| Phase 1 | Project Infrastructure | ✅ Complete |
+| Phase 2–7 | Core Navigation (Sensors → EKF) | ✅ Complete |
+| Phase 8–13 | Intelligence Layer (GNSS, Vibration, ML, Vehicles) | 🔲 Not Started |
 | Phase 14–16 | Map & Integrity | 🔲 Not Started |
 | Phase 17–19 | Evaluation & Benchmarks | 🔲 Not Started |
 | Phase 20–22 | Optimization & Demo | 🔲 Not Started |
