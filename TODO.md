@@ -27,7 +27,8 @@
 - [x] Engine frequency isolation (10-30 Hz band)
 
 ## Phase 10: ML Model Training & Deployment
-- [ ] Train velocity estimator on synthetic + real datasets
+- [x] Train velocity estimator on synthetic datasets
+- [ ] Train velocity estimator on real datasets
 - [ ] Validate velocity RMSE < 0.8 m/s during simulated outages
 - [ ] Model quantization for mobile deployment
 
