@@ -17,9 +17,9 @@
 - [x] 116/116 regressions validated deterministically.
 
 ## Phase 8: GNSS Integrity & Seamless Outage Transitions
-- [ ] Multi-tier GNSS quality estimator (HDOP, satellite count, innovation gating)
-- [ ] Outage detection state machine preventing discontinuous jumps on re-acquisition
-- [ ] Dynamic process noise inflation during outages
+- [x] Multi-tier GNSS quality estimator (HDOP, satellite count, innovation gating)
+- [x] Outage detection state machine preventing discontinuous jumps on re-acquisition
+- [x] Dynamic process noise inflation during outages
 
 ## Phase 9: Vibration Analysis & Spectral Decomposition
 - [ ] Rolling FFT spectrum analyzer for vehicle motion characterization

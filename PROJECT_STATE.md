@@ -18,7 +18,8 @@
 | **Phase 5** | Deterministic INS Mechanization Baseline | ✅ Completed | Unit Tested | 10 tests |
 | **Phase 6** | Error-State Kalman Filter (ESKF) | ✅ Completed | Unit & End-to-End Tested | 9 tests |
 | **Phase 7** | Motion Intelligence: ZUPT & ML Velocity | ✅ Completed | Unit & Integration Tested | 20 tests *(116 total)* |
-| **Phase 8–22** | GNSS Integrity, Constraints, Map Matching & Edge | ⏳ Future Phases | Not Started | 0 |
+| **Phase 8** | GNSS Integrity & Seamless Outage Transitions | ✅ Completed | Unit Tested | 29 tests *(145 total)* |
+| **Phase 9–22** | Map Matching, Spectral Analysis & Hardware Targets | ⏳ Future Phases | Not Started | 0 |
 
 ---
 
@@ -32,3 +33,7 @@
 - **ZUPT Detector**: Soft probabilistic stationary detection P(stat) ∈ [0,1] with adaptive covariance scaling R_zupt = R_base / (P_stat^γ + ε). Exponential soft thresholding based on accelerometer/gyroscope variance and temporal consistency smoothing.
 - **ML Velocity Estimator**: Lightweight 1D CNN architecture accepting 6-channel IMU windows, outputting forward velocity prediction and log-variance for uncertainty quantification. Integration with ESKF via `update_forward_velocity()` with proper vehicle-to-navigation frame Jacobian.
 - **Regression Suite**: 116/116 tests passing under Python 3.14 and NumPy 2.5.3 with zero external mathematical instability dependencies.
+
+## Phase 8 Highlights (GNSS Integrity)
+- **Continuous Quality Scoring**: Extracted mathematically defensible [0,1] confidence metric matching Satellite geometry, signal accuracy properties, hard/soft Mahalanobis innovation gating, and precise kinematic bounds mapping real-world implausibilities (like 50m/s position jumps).
+- **Navigation Mode Manager**: Tracked deterministic recovery phases using strict persistence counts avoiding oscillating transition chattering while seamlessly ramping ESKF measurement gains upon reacquisition to mitigate unmodeled sudden jumps natively without breaking covariance continuities.
