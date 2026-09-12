@@ -22,9 +22,9 @@
 - [x] Dynamic process noise inflation during outages
 
 ## Phase 9: Vibration Analysis & Spectral Decomposition
-- [ ] Rolling FFT spectrum analyzer for vehicle motion characterization
-- [ ] Spectral entropy and road roughness estimator
-- [ ] Engine frequency isolation (10-30 Hz band)
+- [x] Rolling FFT spectrum analyzer for vehicle motion characterization
+- [x] Spectral entropy and road roughness estimator
+- [x] Engine frequency isolation (10-30 Hz band)
 
 ## Phase 10: ML Model Training & Deployment
 - [ ] Train velocity estimator on synthetic + real datasets

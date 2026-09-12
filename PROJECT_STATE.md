@@ -19,7 +19,8 @@
 | **Phase 6** | Error-State Kalman Filter (ESKF) | ✅ Completed | Unit & End-to-End Tested | 9 tests |
 | **Phase 7** | Motion Intelligence: ZUPT & ML Velocity | ✅ Completed | Unit & Integration Tested | 20 tests *(116 total)* |
 | **Phase 8** | GNSS Integrity & Seamless Outage Transitions | ✅ Completed | Unit Tested | 29 tests *(145 total)* |
-| **Phase 9–22** | Map Matching, Spectral Analysis & Hardware Targets | ⏳ Future Phases | Not Started | 0 |
+| **Phase 9** | Vibration Analysis & Spectral Decomposition | ✅ Completed | Unit Tested | 7 tests *(152 total)* |
+| **Phase 10–22** | ML Model Training, Map Matching & Hardware Targets | ⏳ Future Phases | Not Started | 0 |
 
 ---
 
