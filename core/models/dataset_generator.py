@@ -49,11 +49,38 @@ class SyntheticTrajectoryGenerator:
         accel_v = np.zeros((N, 3))
         accel_v[:, 0] = accel_x
         accel_v[:, 2] = -9.80665
+
+        # Initialize angular rate and velocity arrays
+        gyro_v = np.zeros((N, 3))
+        vel_v = np.zeros((N, 3))
         
-        # Add some vibrational noise
-        accel_v += self.rng.normal(0, 0.5, size=(N, 3))
-        gyro_v = self.rng.normal(0, 0.05, size=(N, 3))
-        
+        # Add some vibrational noise whose amplitude scales with speed to make velocity observable!
+        # Base noise
+        accel_noise = self.rng.normal(0, 0.2, size=(N, 3))
+        gyro_noise = self.rng.normal(0, 0.02, size=(N, 3))
+
+        # Velocity-dependent vibration (e.g. road noise, engine RPM)
+        # We will add a sine wave whose frequency scales with velocity (simulating wheel RPM)
+        # Wheel radius roughly 0.3m -> circumference 1.88m. freq = v / 1.88
+        # And amplitude also scales with velocity squared (kinetic energy) or linearly. Let's do linearly.
+        for i in range(N):
+            v = vel_x[i]
+            wheel_freq = v / 1.88
+
+            # Amplitude scaling: baseline + linear scaling
+            amp_acc = 0.5 + 0.1 * v
+            amp_gyr = 0.05 + 0.01 * v
+
+            # Add velocity-dependent deterministic vibration term
+            vib_acc_z = amp_acc * np.sin(2 * np.pi * wheel_freq * time[i])
+            vib_gyr_y = amp_gyr * np.cos(2 * np.pi * wheel_freq * time[i])
+
+            accel_noise[i, 2] += vib_acc_z
+            gyro_noise[i, 1] += vib_gyr_y
+
+        accel_v += accel_noise
+        gyro_v += gyro_noise
+
         vel_v = np.zeros((N, 3))
         vel_v[:, 0] = vel_x
         

@@ -63,26 +63,26 @@ def test_forward_velocity_jacobian():
         return UpdateResult(True, np.zeros(1), np.zeros((1,1)), 0.0)
 
     eskf._apply_measurement = mock_apply
-    eskf.update_forward_velocity(10.0, 1.0)
-    
+    eskf.update_forward_velocity(10.0, 1.0, couple_attitude=True)
+
     H_analytical = captured_H[0]
-    
+
     # Compute finite differences
     delta = 1e-5
     H_fd = np.zeros(15)
-    
+
     from core.alignment.quaternion_utils import quat_to_rotation_matrix, quat_multiply, quat_from_axis_angle
-    
+
     def get_vx(state):
         R_v2n = quat_to_rotation_matrix(state.attitude_q_v2n)
         R_n2v = R_v2n.T
         v_v = R_n2v @ np.array(state.velocity_mps)
         return v_v[0]
-        
+
     v_x_nom = get_vx(ins.state)
-    
+
     import copy
-    
+
     # Velocity perturbation
     for i in range(3):
         s_cpy = copy.deepcopy(ins.state)
@@ -91,7 +91,7 @@ def test_forward_velocity_jacobian():
         s_cpy.velocity_mps = tuple(v)
         v_x_pert = get_vx(s_cpy)
         H_fd[3+i] = (v_x_pert - v_x_nom) / delta
-        
+
     # Attitude perturbation
     for i in range(3):
         s_cpy = copy.deepcopy(ins.state)
@@ -100,12 +100,12 @@ def test_forward_velocity_jacobian():
         angle = delta
         axis = np.array(d_theta) / angle
         q_err = quat_from_axis_angle(tuple(axis), angle)
-        
+
         # q_true = q_nom * q_err
         s_cpy.attitude_q_v2n = quat_multiply(s_cpy.attitude_q_v2n, q_err)
         v_x_pert = get_vx(s_cpy)
         H_fd[6+i] = (v_x_pert - v_x_nom) / delta
-        
+
     assert np.allclose(H_analytical[3:6], H_fd[3:6], rtol=1e-3, atol=1e-5)
     assert np.allclose(H_analytical[6:9], H_fd[6:9], rtol=1e-3, atol=1e-5)
 

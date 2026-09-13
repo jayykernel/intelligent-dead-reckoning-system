@@ -169,7 +169,8 @@ class ErrorStateKalmanFilter:
         self,
         forward_speed_mps: float,
         variance: float,
-        gate: float = 3.0
+        gate: float = 3.0,
+        couple_attitude: bool = False
     ) -> UpdateResult:
         """
         Update using a forward velocity measurement in the Vehicle frame (e.g. from ML model).
@@ -178,6 +179,9 @@ class ErrorStateKalmanFilter:
             forward_speed_mps: Estimated speed along Vehicle X axis.
             variance: Measurement uncertainty variance.
             gate: Mahalanobis distance gate.
+            couple_attitude: If True, include attitude cross-coupling in the Jacobian.
+                             If False (default), set attitude Jacobian to zero for stability
+                             during GNSS outages when attitude is not independently constrained.
         """
         from core.alignment.quaternion_utils import quat_to_rotation_matrix, quat_rotate_vector
 
@@ -206,7 +210,12 @@ class ErrorStateKalmanFilter:
         # d(v_x) / d(theta) = Row 0 of [v_v x]
         # [v_v x] = [[0, -vz, vy], [vz, 0, -vx], [-vy, vx, 0]]
         # Row 0 is [0, -v_v[2], v_v[1]]
-        H[0, 6:9] = np.array([0.0, -v_v[2], v_v[1]])
+        if couple_attitude:
+            # Include attitude cross-coupling term
+            H[0, 6:9] = np.array([0.0, -v_v[2], v_v[1]])
+        else:
+            # Set to zero to prevent instability and attitude divergence
+            H[0, 6:9] = np.array([0.0, 0.0, 0.0])
 
         R_mat = np.array([[variance]])
 
