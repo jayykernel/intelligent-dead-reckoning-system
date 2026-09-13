@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple
 import json
 
 # Add the project root to the path to import modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from core.models.dataset_generator import SyntheticTrajectoryGenerator
 from core.models.velocity_estimator import VelocityEstimatorAPI
