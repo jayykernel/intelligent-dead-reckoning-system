@@ -15,57 +15,65 @@ The system realizes a hybrid **Physics-Informed, Machine-Learning-Augmented Iner
 RAW SENSORS (Accelerometer, Gyroscope, Magnetometer, GNSS/NavIC, Barometer)
                                     │
                                     ▼
-                        SENSOR ABSTRACTION LAYER
+                        SENSOR ABSTRACTION LAYER [Phase 2]
                                     │
                                     ▼
-                           TIME SYNCHRONIZATION
+                           TIME SYNCHRONIZATION [Phase 2]
                                     │
                                     ▼
-                            CALIBRATION ENGINE
+                            CALIBRATION ENGINE [Phase 3]
                     (Biases, Scale Factors, Hard/Soft Iron)
                                     │
                                     ▼
-                         PHONE-TO-VEHICLE ALIGNMENT
+                         PHONE-TO-VEHICLE ALIGNMENT [Phase 4]
                        (Gravity + Velocity Dynamics)
                                     │
                   ┌─────────────────┴──────────────────┐
                   │                                    │
                   ▼                                    ▼
-         MOTION INTELLIGENCE LAYER            DETERMINISTIC KINEMATICS
+         MOTION INTELLIGENCE LAYER            DETERMINISTIC KINEMATICS [Phase 5]
        ┌────────────────────────────┐       ┌────────────────────────────┐
        │ - Temporal CNN / TCN-GRU   │       │ - Quaternion Attitude Int. │
-       │ - Vehicle Classification   │       │ - Specific Force Transform │
-       │ - Stationary Prob P(ZUPT)  │       │ - Velocity & Position Prop │
-       │ - Vibration Energy Anal.   │       │ - Error Covariance Prop.   │
-       │ - Forward Velocity v_fwd   │       └──────────────┬─────────────┘
-       │ - Velocity Var \sigma_v^2  │                      │
+       │   [Phase 10]               │       │ - Specific Force Transform │
+       │ - Vehicle Classification   │       │ - Velocity & Position Prop │
+       │   [FUTURE PHASE]           │       │ - Error Covariance Prop.   │
+       │ - Stationary Prob P(ZUPT)  │       └──────────────┬─────────────┘
+       │   [Phase 7]                │                      │
+       │ - Vibration Energy Anal.   │                      │
+       │   [Phase 9]                │                      │
+       │ - Forward Vel & Var        │                      │
+       │   [Phase 7/10]             │                      │
        │ - Magnetic Reliability     │                      │
+       │   [FUTURE PHASE]           │                      │
        └──────────────┬─────────────┘                      │
                       │                                    │
                       └─────────────────┬──────────────────┘
                                         │
                                         ▼
-                            ERROR-STATE KALMAN FILTER
-                          (15-18 State Nominal Core)
+                          ERROR-STATE KALMAN FILTER [Phase 6]
+                              (15-State Error Core)
                                         │
                          ┌──────────────┴──────────────┐
                          ▼                             ▼
-              ADAPTIVE CONSTRAINT ENGINE        MAP MATCHING ENGINE
+              ADAPTIVE CONSTRAINT ENGINE        MAP MATCHING ENGINE [FUTURE PHASE]
             ┌───────────────────────────┐     ┌────────────────────────────┐
             │ - Soft Adaptive ZUPT      │     │ - Multi-hypothesis graph   │
-            │ - Vehicle-Aware NHC       │     │ - Road geometry & heading  │
-            │ - Dynamic Covariance R    │     │ - Vertical/Level Disambig. │
-            └─────────────┬─────────────┘     └────────────┬───────────────┘
+            │   [Phase 7]               │     │ - Road geometry & heading  │
+            │ - Vehicle-Aware NHC       │     │ - Vertical/Level Disambig. │
+            │   [FUTURE PHASE]          │     └────────────┬───────────────┘
+            │ - Dynamic Covariance R    │                  │
+            │   [Phase 8]               │                  │
+            └─────────────┬─────────────┘                  │
                           │                                │
                           └──────────────┬─────────────────┘
                                          │
                                          ▼
-                            NAVIGATION INTEGRITY ENGINE
+                     NAVIGATION INTEGRITY ENGINE [FUTURE PHASE]
                     (Position, Velocity, Heading Covariances,
                      Integrity Levels, Degradation State Machine)
                                          │
                                          ▼
-                               OUTPUT & API INTERFACE
+                         OUTPUT & API INTERFACE [FUTURE PHASE]
                  (Pose, Covariance, Confidence, Mode Diagnostics)
 ```
 
@@ -98,7 +106,7 @@ $$\dot{b}_g(t) = w_{bg}(t), \quad w_{bg} \sim \mathcal{N}(0, Q_{bg})$$
 
 ## 3. Error-State Kalman Filter (ESKF) Architecture
 
-The nominal state tracks large-scale physical kinematics without singularity; the error state represents small perturbations driven by linearized dynamics.
+The nominal state uses a 16-parameter representation (including a quaternion) to track large-scale physical kinematics without singularity; the ESKF tracks small perturbations driven by linearized dynamics using a 15-DOF error state.
 
 ### 3.1 State Representation
 
@@ -240,7 +248,7 @@ $$H_{\text{zupt}} = \begin{bmatrix} 0_{3\times 3} & I_{3\times 3} & 0_{3\times 3
 $$R_{\text{zupt}} = \text{diag}\left( \frac{\sigma_{\text{zupt, base}}^2}{P_{\text{stat}}^\gamma + \epsilon} \right)$$
 where $\gamma \ge 2$ penalizes uncertain detections.
 
-### 6.2 Vehicle-Aware Non-Holonomic Constraints (NHC)
+### 6.2 Vehicle-Aware Non-Holonomic Constraints (NHC) [APPROVED FUTURE DESIGN]
 Under non-slipping land vehicle dynamics, lateral velocity $v_y^v \approx 0$ and vertical velocity $v_z^v \approx 0$:
 
 $$v^v = R_n^v v^n = (R_p^v R_b^p R_n^b) v^n$$
@@ -298,7 +306,7 @@ $$R_{\text{v\_ml}} = \sigma_{\text{v\_pred}}^2$$
 
 ---
 
-## 8. Multi-Hypothesis Map Reasoning
+## 8. Multi-Hypothesis Map Reasoning [APPROVED FUTURE DESIGN]
 
 When operating in dense urban environments, multi-level structures, or complex highway interchanges:
 1. **Hypothesis Generation:** Candidate road segments within $3\sigma$ position error ellipse.
@@ -308,9 +316,9 @@ When operating in dense urban environments, multi-level structures, or complex h
 
 ---
 
-## 9. Navigation Integrity & Uncertainty Reporting
+## 9. Navigation Integrity & Uncertainty Reporting [APPROVED FUTURE DESIGN]
 
-The system outputs a comprehensive, non-fabricated telemetry object at 10 Hz / 200 Hz:
+The system outputs a comprehensive, non-fabricated telemetry object at 10 Hz / 200 Hz. *(Note: The JSON object below is an **ILLUSTRATIVE EXAMPLE** of the target output, not currently measured output)*:
 
 ```json
 {
@@ -384,7 +392,7 @@ dead-reckoning-core/
 
 ---
 
-## 11. Verification and Performance Standards
+## 11. Verification and Performance Standards (ENGINEERING REQUIREMENTS / TARGETS)
 
 | Metric | Minimum Acceptable | Target Objective | Validation Protocol |
 |---|---|---|---|

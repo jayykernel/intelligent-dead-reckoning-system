@@ -36,6 +36,15 @@
 - [x] Designed and implemented corrective aiding policy mitigating ML miscalibration limits using temporal structural bounds.
 - [x] Re-evaluated synthetic integration structurally confirming non-degrading baseline improvements (19.3m drift vs 58.2m).
 
+## Phase 11: Real-Data Validation & Generalization
+- [x] Establish the Phase 11 validation framework and benchmark entry point (`phase11_validation.py`)
+- [ ] Determine real sensor dataset availability (data/raw and data/processed are empty -> BLOCKED)
+- [x] Evaluate the validation matrix over synthetic control and varied synthetic outage scenarios (short 5s, medium 15s, long 30s outages; varied acceleration profiles)
+- [ ] Add new Phase 11 unit tests covering data adapter validation, outage evaluation, and safety telemetry
+- [x] Run full test regression suite (all 158 tests passed)
+- [ ] Update PROJECT_STATE.md, ENGINEERING_LOG.md, TODO.md
+- [ ] Author PHASE_11_REAL_DATA_VALIDATION_CHECKPOINT.md
+
 ## Future Phases
 - [ ] Vehicle Classification (Car vs Bike vs Scooter)
 - [ ] Vehicle-Aware Adaptive Non-Holonomic Constraints (NHC)

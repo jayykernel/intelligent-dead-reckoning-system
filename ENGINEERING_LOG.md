@@ -160,3 +160,17 @@
   - Added new explicit unit test bounding API rate limits logically. 
   - All 158 tests passing correctly natively.
 - **Status:** Phase 10 Complete structurally. The ML model now improves synthetic trajectory navigation cleanly natively (verified 66% drift reduction vs purely inertial). Real-World validation remains pending. Proceed natively.
+
+## 2026-09-13: Phase 11 Started
+- **Objective:** Validate whether the Phase 10 non-degrading ML-aiding policy generalizes from deterministic synthetic trajectory to realistic data and realistic GNSS-denied operating conditions.
+- **Actions:**
+  - Created `phase11_validation.py` to evaluate ML-aided ESKF performance across various synthetic GNSS outage scenarios and prepare for real-data ingestion.
+  - Evaluated validation matrix over outage durations (5s, 15s, 30s) and max speeds (10, 20, 30 m/s) using synthetic data from `SyntheticTrajectoryGenerator`.
+  - Results: ML-aiding policy (update_interval=20) shows mixed generalization:
+    * Non-degrading for 5s outages at all speeds (0 ML updates occurred, suggesting GNSS remained available throughout most of the outage window)
+    * Non-degrading for 15s and 30s outages at higher speeds (20, 30 m/s) where fewer ML updates occurred
+    * Degrading for 15s outage at 10 m/s (+4.961 m drift) and 30s outages at 10-30 m/s (+71-136 m drift)
+  - Observed that ML model (trained on 30 m/s max speed) may not generalize well to lower-speed scenarios (10 m/s)
+  - All 158 regression tests pass.
+  - **Real-Data Status:** BLOCKED - `data/raw` and `data/processed` directories are empty. All validation results are synthetic-only.
+- **Status:** Phase 11 validation framework established. Synthetic generalization tests reveal limitations of the current ML-aiding policy at lower speeds and longer outages. Real-data validation awaits sensor dataset availability.
