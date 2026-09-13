@@ -71,11 +71,13 @@ class VelocityEstimatorAPI:
     Deterministic inference API wrapping the ML model.
     Provides fallback mechanisms when data is insufficient.
     """
-    def __init__(self, model_path: str = None, window_size: int = 100):
+    def __init__(self, model_path: str = None, window_size: int = 100, update_interval: int = 20):
         self.window_size = window_size
+        self.update_interval = update_interval
+        self.samples_since_last_update = 0
         self.is_ready = False
         self.buffer = []
-        
+
         if TORCH_AVAILABLE:
             self.model = Velocity1DCNN(in_channels=6, window_size=window_size)
             if model_path:
@@ -97,11 +99,17 @@ class VelocityEstimatorAPI:
         self.buffer.append((accel_v, gyro_v))
         if len(self.buffer) > self.window_size:
             self.buffer.pop(0)
+            self.samples_since_last_update += 1
+
+    def should_update(self) -> bool:
+        """Check if enough samples have passed since the last update to mitigate correlated residuals."""
+        return len(self.buffer) >= self.window_size and self.samples_since_last_update >= self.update_interval
 
     def estimate_velocity(self) -> Tuple[float, float]:
         """
         Produce a forward velocity estimate and its variance.
-        
+        Resets the update counter if an estimate is produced.
+
         Returns:
             velocity (m/s)
             variance (m/s)^2
@@ -109,13 +117,16 @@ class VelocityEstimatorAPI:
         # Fallback 1: Insufficient history
         if len(self.buffer) < self.window_size:
             return 0.0, 100.0 # High uncertainty
-            
+
         # Fallback 2: Torch not available or model failing
         if not TORCH_AVAILABLE or not self.is_ready:
             # Kinematic fallback: integral of accel roughly?
             # Or just return highly uncertain zero.
             return 0.0, 1000.0
-            
+
+        # We are performing an update, so reset the counter
+        self.samples_since_last_update = 0
+
         # Construct input tensor
         # Shape: (1, 6, window_size)
         inp = np.zeros((1, 6, self.window_size), dtype=np.float32)
