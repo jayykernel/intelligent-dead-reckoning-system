@@ -155,3 +155,52 @@ class MapMatcher:
             confidence=confidence,
             observation_cov=pos_cov
         )
+
+    def match_all(self, state: NavState) -> List[MapMatchResult]:
+        p_ned = np.array(state.position_m)
+        v_ned = np.array(state.velocity_mps)
+        v_2d = v_ned[0:2]
+        speed = np.linalg.norm(v_2d)
+        
+        heading_rad = math.atan2(v_2d[1], v_2d[0]) if speed > 1.0 else None
+        
+        candidate_results = []
+        for seg in self.segments:
+            proj3d, dist, t = self._point_segment_distance(p_ned, seg)
+            
+            if dist > self.max_distance_m:
+                continue
+                
+            heading_penalty = 1.0
+            if heading_rad is not None:
+                seg_dir = seg.unit_direction_2d
+                seg_heading = math.atan2(seg_dir[1], seg_dir[0])
+                angle_diff = abs(math.atan2(math.sin(heading_rad - seg_heading), math.cos(heading_rad - seg_heading)))
+                angle_diff_rev = abs(math.atan2(math.sin(heading_rad - (seg_heading + math.pi)), math.cos(heading_rad - (seg_heading + math.pi))))
+                best_angle_diff = min(angle_diff, angle_diff_rev)
+                if best_angle_diff > self.max_heading_error_rad:
+                    continue
+                heading_penalty = max(0.0, 1.0 - (best_angle_diff / self.max_heading_error_rad))
+                
+            u_along = seg.unit_direction_2d
+            u_cross = np.array([-u_along[1], u_along[0]])
+            V = np.eye(3)
+            V[0:2, 0] = u_along
+            V[0:2, 1] = u_cross
+            Lambda = np.diag([self.along_track_variance, self.cross_track_variance, self.vertical_variance])
+            pos_cov = V @ Lambda @ V.T
+            confidence = max(0.0, 1.0 - (dist / self.max_distance_m)) * heading_penalty
+            
+            res = MapMatchResult(
+                matched_segment=seg,
+                projected_pos_ned=tuple(proj3d),
+                cross_track_error=dist,
+                confidence=confidence,
+                observation_cov=pos_cov
+            )
+            candidate_results.append(res)
+            
+        # Sort by confidence descending
+        candidate_results.sort(key=lambda r: r.confidence, reverse=True)
+        return candidate_results
+
