@@ -220,3 +220,42 @@ class ErrorStateKalmanFilter:
         R_mat = np.array([[variance]])
 
         return self._apply_measurement(z, H, R_mat, mahalanobis_gate=gate)
+
+
+    def update_kinematic_constraints(
+        self,
+        lateral_variance: float = 0.25,
+        vertical_variance: float = 0.25,
+        gate: float = 4.0,
+        couple_attitude: bool = True
+    ) -> UpdateResult:
+        """
+        Non-Holonomic Constraints (NHC) update.
+        Assumes the vehicle generally does not slide sideways or fly.
+        Applies a soft zero-measurement constraint to vehicle-frame lateral/vertical velocity.
+        """
+        from core.alignment.quaternion_utils import quat_to_rotation_matrix
+
+        v_n = np.array(self.ins.state.velocity_mps)
+        q_v2n = self.ins.state.attitude_q_v2n
+        R_v2n = quat_to_rotation_matrix(q_v2n)
+        R_n2v = R_v2n.T
+
+        v_v = R_n2v @ v_n
+
+        # Measurements: v_y = 0, v_z = 0
+        z = np.array([0.0 - v_v[1], 0.0 - v_v[2]])
+
+        H = np.zeros((2, 15))
+        # d(v_y, v_z) / d(v_n) = Rows 1 and 2 of R_n2v
+        H[0:2, 3:6] = R_n2v[1:3, :]
+
+        if couple_attitude:
+            # Row 1 of [v_v x] is [v_v[2], 0, -v_v[0]]
+            # Row 2 of [v_v x] is [-v_v[1], v_v[0], 0]
+            H[0, 6:9] = np.array([v_v[2], 0.0, -v_v[0]])
+            H[1, 6:9] = np.array([-v_v[1], v_v[0], 0.0])
+
+        R_mat = np.diag([lateral_variance, vertical_variance])
+
+        return self._apply_measurement(z, H, R_mat, mahalanobis_gate=gate)
