@@ -71,7 +71,8 @@ def run_simulation(
     from core.models.velocity_estimator import VelocityEstimatorAPI
     if use_ml:
         # For synthetic audit we use window=100.
-        ml_estimator = VelocityEstimatorAPI(window_size=100, update_interval=ml_update_interval)
+        model_path = os.path.join(os.path.dirname(__file__), "../../core/models/velocity_model.pth")
+        ml_estimator = VelocityEstimatorAPI(model_path=model_path, window_size=100, update_interval=ml_update_interval)
         # Seed the updates so the very first update triggers exactly at sample 99
         # (when the buffer reaches 100).
         ml_estimator.samples_since_last_update = ml_update_interval
