@@ -22,6 +22,7 @@ import numpy as np
 
 from ..sensors.data_types import GnssFix, ImuSample, MagSample
 from .frames import VehicleType
+from ..calibration.dynamic_error import MagneticReliabilityScorer
 from .quaternion_utils import Quat, quat_from_axis_angle, quat_normalize, wrap_angle
 
 
@@ -77,6 +78,8 @@ class HeadingEstimator:
         self._confidence: float = 0.0
         self._is_valid: bool = False
         self._last_gnss_fix: Optional[GnssFix] = None
+        self._mag_scorer = MagneticReliabilityScorer(window_size=history_size)
+        self._current_mag_score: float = 0.1
 
     def add_gnss_fix(self, fix: GnssFix) -> bool:
         """
@@ -194,6 +197,10 @@ class HeadingEstimator:
         if mag_mag < 10.0 or mag_mag > 80.0:
             return False
 
+        # Phase 14: Dynamic Magnetic Reliability Scoring
+        # Adaptively score and weight the magnetometer reading based on environmental stability
+        self._current_mag_score = self._mag_scorer.add_sample(tuple(mag))
+
         # Extract heading from horizontal components
         # Assuming phone is roughly level (to be improved with tilt compensation)
         mx, my, _ = mag
@@ -204,7 +211,7 @@ class HeadingEstimator:
         # We'll assume a standard convention and let confidence be low
         heading_mag = math.atan2(my, mx)  # Radians from phone X axis
 
-        # Store with very low confidence
+        # Store heading
         self._mag_headings.append(heading_mag)
         return True
 
@@ -237,7 +244,7 @@ class HeadingEstimator:
             if abs(cos_sum) > 1e-6 or abs(sin_sum) > 1e-6:
                 mag_heading = math.atan2(sin_sum, cos_sum)
                 # Confidence based on consistency and number of samples, scaled by low weight
-                mag_conf = min(1.0, len(self._mag_headings) / 20.0) * self.mag_weight
+                mag_conf = min(1.0, len(self._mag_headings) / 20.0) * self.mag_weight * self._current_mag_score
                 source_headings.append(mag_heading)
                 source_confs.append(mag_conf)
 
@@ -308,3 +315,5 @@ class HeadingEstimator:
         self._confidence = 0.0
         self._is_valid = False
         self._last_gnss_fix = None
+        self._mag_scorer = MagneticReliabilityScorer(window_size=self.history_size)
+        self._current_mag_score = 0.1
