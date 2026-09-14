@@ -14,6 +14,7 @@ class RoadSegment:
     id: str
     start_ned: Tuple[float, float, float]
     end_ned: Tuple[float, float, float]
+    has_elevation: bool = False  # Track if segment has explicit vertical constraints
     
     @property
     def vector_2d(self) -> np.ndarray:

@@ -61,8 +61,15 @@ class MapMatcher:
             
         dist = np.linalg.norm(p2d - proj2d)
         
-        # 3D projection (keeping altitude same as state to ignore vertical snapping for now)
-        proj3d = np.array([proj2d[0], proj2d[1], float(p[2])])
+        # 3D projection
+        if getattr(seg, 'has_elevation', False):
+            start_z = float(seg.start_ned[2])
+            end_z = float(seg.end_ned[2])
+            proj_z = start_z + t * (end_z - start_z)
+        else:
+            proj_z = float(p[2])
+
+        proj3d = np.array([proj2d[0], proj2d[1], proj_z])
         return proj3d, float(dist), float(t)
         
     def match(self, state: NavState) -> Optional[MapMatchResult]:
@@ -139,7 +146,8 @@ class MapMatcher:
         V[0:2, 1] = u_cross
         
         # Eigenvalue matrix
-        Lambda = np.diag([self.along_track_variance, self.cross_track_variance, self.vertical_variance])
+        vert_var = self.vertical_variance if getattr(seg, 'has_elevation', False) else 1e9
+        Lambda = np.diag([self.along_track_variance, self.cross_track_variance, vert_var])
         
         # S = V * Lambda * V^T
         pos_cov = V @ Lambda @ V.T
@@ -187,7 +195,8 @@ class MapMatcher:
             V = np.eye(3)
             V[0:2, 0] = u_along
             V[0:2, 1] = u_cross
-            Lambda = np.diag([self.along_track_variance, self.cross_track_variance, self.vertical_variance])
+            vert_var = self.vertical_variance if getattr(seg, 'has_elevation', False) else 1e9
+            Lambda = np.diag([self.along_track_variance, self.cross_track_variance, vert_var])
             pos_cov = V @ Lambda @ V.T
             confidence = max(0.0, 1.0 - (dist / self.max_distance_m)) * heading_penalty
             
