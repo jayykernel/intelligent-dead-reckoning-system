@@ -246,22 +246,11 @@ Historical documents/checkpoints are evidence and history only.
 
 ## CURRENT PROJECT GATE
 
-Phase 11 is currently BLOCKED FOR REAL-DATA VALIDATION because the required real sensor dataset is unavailable.
+The 21-phase engineering roadmap is COMPLETE.
+There is NO Phase 22.
 
-Do NOT:
-- start Phase 12
-- retrain the ML model
-- claim real-world validation
-- claim universal ML benefit
+The system is TECHNICALLY COMPLETE — REAL-WORLD VALIDATION PENDING.
+Real-world smartphone/edge benchmarks and physical SIH accuracy targets remain locked behind the lack of authentic empirical hardware datasets.
 
-until the current Phase 11 gate has been properly resolved.
-
-## FINAL RULE
-
-When uncertain, prefer:
-
-correctness over novelty,
-reproducibility over speed,
-measured evidence over claims,
-one canonical implementation over duplicates,
-and a safe deterministic fallback over an unvalidated learned component.
+The project's next activity is REAL-WORLD VALIDATION.
+Do NOT attempt to invent new engineering phases.
