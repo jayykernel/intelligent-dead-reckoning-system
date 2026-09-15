@@ -34,6 +34,7 @@ class ErrorStateKalmanFilter:
     """
     def __init__(self, ins: StrapdownINS):
         self.ins = ins
+        self._I15 = np.eye(15)
 
     def _apply_measurement(
         self,
@@ -71,7 +72,7 @@ class ErrorStateKalmanFilter:
         delta_x = K @ z
 
         # Covariance update (Joseph form for numeric stability and guaranteed PSD)
-        I_KH = np.eye(15) - K @ H
+        I_KH = self._I15 - K @ H
         P_new = I_KH @ P @ I_KH.T + K @ R @ K.T
         P_new = 0.5 * (P_new + P_new.T) # force symmetry
 
@@ -97,15 +98,20 @@ class ErrorStateKalmanFilter:
         delta_bg = delta_x[12:15]
 
         # 1. Position and Velocity (Additive)
-        p_new = np.array(state.position_m) + delta_p
-        v_new = np.array(state.velocity_mps) + delta_v
+        pm = state.position_m
+        vm = state.velocity_mps
+        p_new = (pm[0] + delta_p[0], pm[1] + delta_p[1], pm[2] + delta_p[2])
+        v_new = (vm[0] + delta_v[0], vm[1] + delta_v[1], vm[2] + delta_v[2])
 
         # 2. Biases (Additive in sensor frame)
-        ba_new = np.array(state.accel_bias_mps2) + delta_ba
-        bg_new = np.array(state.gyro_bias_radps) + delta_bg
+        b_am = state.accel_bias_mps2
+        b_gm = state.gyro_bias_radps
+        ba_new = (b_am[0] + delta_ba[0], b_am[1] + delta_ba[1], b_am[2] + delta_ba[2])
+        bg_new = (b_gm[0] + delta_bg[0], b_gm[1] + delta_bg[1], b_gm[2] + delta_bg[2])
 
         # 3. Attitude (Multiplicative)
-        angle = float(np.linalg.norm(delta_t))
+        import math
+        angle = math.hypot(delta_t[0], math.hypot(delta_t[1], delta_t[2]))
         if angle > 1e-12:
             axis = delta_t / angle
             q_err = quat_from_axis_angle(tuple(axis), angle)
@@ -119,11 +125,11 @@ class ErrorStateKalmanFilter:
         # 4. Construct new state
         new_state = NavState(
             timestamp_ns=state.timestamp_ns,
-            position_m=tuple(p_new),
-            velocity_mps=tuple(v_new),
+            position_m=p_new,
+            velocity_mps=v_new,
             attitude_q_v2n=q_new,
-            accel_bias_mps2=tuple(ba_new),
-            gyro_bias_radps=tuple(bg_new)
+            accel_bias_mps2=ba_new,
+            gyro_bias_radps=bg_new
         )
 
         self.ins.state = new_state

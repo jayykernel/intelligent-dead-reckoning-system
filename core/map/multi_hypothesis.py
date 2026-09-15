@@ -38,7 +38,7 @@ class MultiHypothesisTracker:
         self.next_id = 1
         
     def initialize(self, base_ins: StrapdownINS):
-        ins_clone = copy.deepcopy(base_ins)
+        ins_clone = base_ins.clone()
         eskf_clone = ErrorStateKalmanFilter(ins_clone)
         self.hypotheses = [Hypothesis(f"H{self.next_id}", ins_clone, eskf_clone, 1.0)]
         self.next_id += 1
@@ -59,14 +59,19 @@ class MultiHypothesisTracker:
             
             # Baseline (unconstrained) hypothesis branch
             # Prevents a catastrophically wrong map match from seizing the state
-            baseline_hyp = copy.deepcopy(hyp)
-            baseline_hyp.id = f"H{self.next_id}"
-            baseline_hyp.score = hyp.score * self.unconstrained_baseline_prob
+            b_ins = hyp.ins.clone()
+            baseline_hyp = Hypothesis(
+                id=f"H{self.next_id}",
+                ins=b_ins,
+                eskf=ErrorStateKalmanFilter(b_ins),
+                score=hyp.score * self.unconstrained_baseline_prob,
+                parent_segment_id=hyp.parent_segment_id
+            )
             self.next_id += 1
             new_hypotheses.append(baseline_hyp)
             
             for match in matches:
-                child_ins = copy.deepcopy(hyp.ins)
+                child_ins = hyp.ins.clone()
                 child_eskf = ErrorStateKalmanFilter(child_ins)
                 
                 # Apply map constraint
