@@ -151,7 +151,8 @@ def convert_s1_dataset(s_csv_path: Path, v_csv_path: Path, out_phone_bin: Path, 
                     f_spd = float(s_row[si_spd])
                     f_acc = float(s_row[si_acc])
                     sat_str = s_row[si_sat].split('/')[0].strip()
-                    sat_count = int(sat_str) if sat_str else 0
+                    try: sat_count = int(sat_str) if sat_str else 0
+                    except ValueError: sat_count = 0
                     spd_mps = max(0.0, f_spd / 3.6)
                     hdg_rad = math.radians(float(s_row[si_ori]))
                     gnss = GnssFix(
@@ -169,7 +170,8 @@ def convert_s1_dataset(s_csv_path: Path, v_csv_path: Path, out_phone_bin: Path, 
                     gnss_count += 1
                     last_gnss_lat = lat
                     last_gnss_lon = lon
-                except (ValueError, ZeroDivisionError):
+                except (ValueError, ZeroDivisionError) as e:
+                    print(f'GNSS ERR: {e}')
                     pass
             else:
                 gnss_deduplicated += 1
