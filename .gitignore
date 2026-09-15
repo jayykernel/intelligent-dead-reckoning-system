@@ -55,3 +55,6 @@ logs/
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+data/raw/io-vnbd/
+data/processed/*.csv
+data/processed/*.bin

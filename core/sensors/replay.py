@@ -139,7 +139,7 @@ class SensorLogger:
         else:  # binary
             # Write: type(1) + timestamp(8) + accel(3*4) + gyro(3*4) = 1+8+12+12 = 33 bytes
             data = struct.pack(
-                '<Bdffffff',
+                '<BQffffff',
                 FORMAT_IMU,
                 sample.timestamp_ns,
                 sample.accel_m_s2[0], sample.accel_m_s2[1], sample.accel_m_s2[2],
@@ -167,7 +167,7 @@ class SensorLogger:
         else:  # binary
             # Type(1) + timestamp(8) + lat/lon/alt(3*8) + vel_ned(3*8) + accuracies(3*4) + satcount(2) = 1+8+24+24+12+2 = 71 bytes
             data = struct.pack(
-                '<Bddddddddddfffi',
+                '<BQddddddfffh',
                 FORMAT_GNSS,
                 fix.timestamp_ns,
                 fix.latitude_deg, fix.longitude_deg, fix.altitude_m,
@@ -193,7 +193,7 @@ class SensorLogger:
         else:  # binary
             # Type(1) + timestamp(8) + mag(3*4) = 1+8+12 = 21 bytes
             data = struct.pack(
-                '<Bdfff',
+                '<BQfff',
                 FORMAT_MAG,
                 sample.timestamp_ns,
                 sample.magnetic_field_ut[0],
@@ -219,7 +219,7 @@ class SensorLogger:
         else:  # binary
             # Type(1) + timestamp(8) + pressure(4) = 1+8+4 = 13 bytes
             data = struct.pack(
-                '<Bdf',
+                '<BQf',
                 FORMAT_BARO,
                 sample.timestamp_ns,
                 sample.pressure_pa
@@ -302,7 +302,7 @@ class SensorReplayIterator:
             # Open file on first call
             self._file = open(self.file_path, 'rb')
             # Skip header for binary format
-            if self._file.read(8) != b'DRLog\v1':
+            if self._file.read(7) != b'DRLog\x00\x01':
                 raise ValueError("Invalid log file format")
 
         # For simplicity, we'll implement only binary format replay here
@@ -328,7 +328,7 @@ class SensorReplayIterator:
                 data = self._file.read(32)
                 if len(data) < 32:
                     return None
-                unpacked = struct.unpack('<dffffff', data)
+                unpacked = struct.unpack('<Qffffff', data)
                 timestamp_ns = int(unpacked[0])
                 return ImuSample(
                     timestamp_ns=timestamp_ns,
@@ -341,19 +341,19 @@ class SensorReplayIterator:
                 data = self._file.read(70)
                 if len(data) < 70:
                     return None
-                unpacked = struct.unpack('<Bddddddddddffi', data)
+                unpacked = struct.unpack('<Qddddddfffh', data)
                 # Note: First byte is the format tag we already read
-                timestamp_ns = int(unpacked[1])
+                timestamp_ns = int(unpacked[0])
                 return GnssFix(
                     timestamp_ns=timestamp_ns,
-                    latitude_deg=unpacked[2],
-                    longitude_deg=unpacked[3],
-                    altitude_m=unpacked[4],
-                    velocity_ned_mps=(unpacked[5], unpacked[6], unpacked[7]),
-                    horizontal_accuracy_m=unpacked[8],
-                    vertical_accuracy_m=unpacked[9],
-                    speed_accuracy_mps=unpacked[10],
-                    satellite_count=unpacked[11]
+                    latitude_deg=unpacked[1],
+                    longitude_deg=unpacked[2],
+                    altitude_m=unpacked[3],
+                    velocity_ned_mps=(unpacked[4], unpacked[5], unpacked[6]),
+                    horizontal_accuracy_m=unpacked[7],
+                    vertical_accuracy_m=unpacked[8],
+                    speed_accuracy_mps=unpacked[9],
+                    satellite_count=unpacked[10]
                 )
 
             elif type_val == FORMAT_MAG:
@@ -361,11 +361,11 @@ class SensorReplayIterator:
                 data = self._file.read(20)
                 if len(data) < 20:
                     return None
-                unpacked = struct.unpack('<Bdfff', data)
-                timestamp_ns = int(unpacked[1])
+                unpacked = struct.unpack('<Qfff', data)
+                timestamp_ns = unpacked[0]
                 return MagSample(
                     timestamp_ns=timestamp_ns,
-                    magnetic_field_ut=(unpacked[2], unpacked[3], unpacked[4])
+                    magnetic_field_ut=(unpacked[1], unpacked[2], unpacked[3])
                 )
 
             elif type_val == FORMAT_BARO:
@@ -373,11 +373,11 @@ class SensorReplayIterator:
                 data = self._file.read(12)
                 if len(data) < 12:
                     return None
-                unpacked = struct.unpack('<Bdf', data)
-                timestamp_ns = int(unpacked[1])
+                unpacked = struct.unpack('<Qf', data)
+                timestamp_ns = unpacked[0]
                 return BaroSample(
                     timestamp_ns=timestamp_ns,
-                    pressure_pa=unpacked[2]
+                    pressure_pa=unpacked[1]
                 )
 
             else:
