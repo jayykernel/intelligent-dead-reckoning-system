@@ -21,9 +21,16 @@ def load_iovnbd_session(
     Load raw sensor (S) and vehicle (V) CSV files for a given session.
     Handles encoding differences across platforms.
     """
-    session_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver, session)
+    # Try direct path first (for flexibility in caller)
+    session_dir = os.path.join(data_dir, driver, session)
+    if os.path.exists(session_dir):
+        pass  # Use as-is
+    else:
+        # Fallback: assume data_dir is the root and prepend "Categorised IOVNB Dataset"
+        session_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver, session)
+
     if not os.path.exists(session_dir):
-        # Fallback for sessions at top level or variations
+        # Last resort: check if session files are at driver level
         alt_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver)
         if os.path.exists(alt_dir) and any(f.endswith('.csv') for f in os.listdir(alt_dir)):
             session_dir = alt_dir

@@ -248,8 +248,8 @@ class GNSSINSFusionEngine:
             # Rotate mag to vehicle frame
             mag_veh = mag_raw @ self.calib.R_phone_to_veh.T
             is_clean, mag_yaw, mag_info = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
-            if is_clean and mag_yaw is not None and not is_gnss_available:
-                # Apply 1-DOF NIS gated heading update
+            if is_clean and mag_yaw is not None:
+                # Apply 1-DOF NIS gated heading update whenever magnetometer is clean
                 passed, _, _ = self.ekf.update_heading(
                     heading_rad=mag_yaw,
                     sigma_heading=np.radians(8.0),
@@ -270,21 +270,10 @@ class GNSSINSFusionEngine:
                 timestamp=timestamp
             )
             if gnss_vel_enu is not None:
-                # GNSS velocity update with adaptive gating
-                # If yaw error is large, still apply velocity update but with increased sigma
-                speed_2d = np.linalg.norm(gnss_vel_enu[:2])
-                if speed_2d > 2.0:
-                    # At higher speeds, trust velocity more even if yaw is off
-                    sigma_vel_adaptive = 1.0
-                    alpha_vel = 0.05
-                else:
-                    sigma_vel_adaptive = 0.5
-                    alpha_vel = 0.01
-
                 gnss_vel_passed, _, _ = self.ekf.update_gnss_velocity(
                     v_gnss_enu=gnss_vel_enu,
-                    sigma_vel=sigma_vel_adaptive,
-                    alpha=alpha_vel,
+                    sigma_vel=0.5,
+                    alpha=0.01,
                     timestamp=timestamp
                 )
                 # GNSS Course-Over-Ground (COG) provides absolute heading

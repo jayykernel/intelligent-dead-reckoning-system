@@ -166,8 +166,14 @@ class ErrorStateEKF:
         Q[0:3, 0:3] = np.eye(3) * (0.5 * (self.sigma_acc * Q_scale) * dt**2)**2
         # Velocity noise from acc
         Q[3:6, 3:6] = np.eye(3) * ((self.sigma_acc * Q_scale) * dt)**2
-        # Attitude noise from gyro
-        Q[6:9, 6:9] = np.eye(3) * ((self.sigma_gyro * Q_scale) * dt)**2
+
+        # Attitude noise from gyro: adaptive scaling during fast maneuvers
+        # High angular rates increase integration errors and scale factor uncertainties
+        # Scale proportionally to gyro magnitude to capture gyro integration error ~= gyro_rate * dt
+        gyro_mag = np.linalg.norm(gyro_corr)
+        adaptive_sigma_gyro = self.sigma_gyro * Q_scale + 2.0 * gyro_mag  # Add 2x rate magnitude as uncertainty
+        Q[6:9, 6:9] = np.eye(3) * (adaptive_sigma_gyro * dt)**2
+
         # Bias random walks
         Q[9:12, 9:12] = np.eye(3) * (self.sigma_acc_bias**2 * dt)
         Q[12:15, 12:15] = np.eye(3) * (self.sigma_gyro_bias**2 * dt)

@@ -204,12 +204,14 @@ def main():
     parser.add_argument("--data-type", choices=["car", "tw"], required=True)
     parser.add_argument("--driver", default="S (Driver A)")
     parser.add_argument("--session", default="S1")
+    parser.add_argument("--raw-root", default="data/raw")
     args = parser.parse_args()
 
     run_evaluation(
         data_type=args.data_type,
         driver=args.driver,
-        session=args.session
+        session=args.session,
+        raw_root=args.raw_root
     )
 
 if __name__ == "__main__":
