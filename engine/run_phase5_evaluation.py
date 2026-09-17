@@ -72,9 +72,11 @@ def run_evaluation(
         print("  WARNING: Calibration failed, using identity transformation and zero bias.")
         R_phone_to_veh = np.eye(3)
         gyro_bias = np.zeros(3)
+        calib_confidence = 0.0
     else:
         R_phone_to_veh = calib.R_phone_to_veh
         gyro_bias = calib.gyro_bias
+        calib_confidence = calib.alignment_score
 
     # ---------- 2. Initialize Classifier and EKF ----------
     vehicle_classifier = VehicleClassifier(model_path=model_class_path)
@@ -307,15 +309,17 @@ def run_evaluation(
     if np.any(np.isnan(gt_heading)):
         gt_heading = np.interp(np.arange(len(gt_heading)), np.where(~np.isnan(gt_heading))[0], gt_heading[~np.isnan(gt_heading)])
 
-    final_gt_heading = gt_heading[-1]
-    q_final = quat[-1]
-    psi_final = np.arctan2(2.0 * (q_final[0] * q_final[3] + q_final[1] * q_final[2]), 1.0 - 2.0 * (q_final[2]**2 + q_final[3]**2))
+    # Compute trajectory-wide estimated heading
+    qw, qx, qy, qz = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
+    psi_all = np.arctan2(2.0 * (qw*qz + qx*qy), 1.0 - 2.0 * (qy**2 + qz**2))
+    est_heading_all = gt_heading_0 + np.degrees(np.unwrap(psi_all - psi_all[0]))
 
-    q0 = quat[0]
-    psi_0 = np.arctan2(2.0 * (q0[0] * q0[3] + q0[1] * q0[2]), 1.0 - 2.0 * (q0[2]**2 + q0[3]**2))
+    # Calculate angular differences along trajectory
+    heading_diffs = np.abs((est_heading_all - gt_heading + 180) % 360 - 180)
 
-    est_final_heading = gt_heading_0 + np.degrees(np.unwrap([0.0, psi_final - psi_0])[1])
-    heading_error = abs((est_final_heading - final_gt_heading + 180) % 360 - 180)
+    heading_error_mean = float(np.mean(heading_diffs))
+    heading_error_rms = float(np.sqrt(np.mean(heading_diffs**2)))
+    heading_error_final = float(heading_diffs[-1])
 
     # Generate comparison plot
     out_dir = os.path.join("data/processed/phase5_eval", data_type, session)
@@ -355,7 +359,10 @@ def run_evaluation(
     print(f"  Phase 5 Drift %:                 {drift_pct:.2f}%")
     print(f"  Speed MAE:                       {speed_mae:.2f} m/s")
     print(f"  Speed RMSE:                      {speed_rmse:.2f} m/s")
-    print(f"  Heading Error (Final):           {heading_error:.2f} deg")
+    print(f"  Heading Error (Mean):            {heading_error_mean:.2f} deg")
+    print(f"  Heading Error (RMS):             {heading_error_rms:.2f} deg")
+    print(f"  Heading Error (Final):           {heading_error_final:.2f} deg")
+    print(f"  Calib Confidence Score:          {calib_confidence:.2f}")
     print(f"  Plot saved to:                   {plot_path}")
 
     return {
@@ -364,7 +371,10 @@ def run_evaluation(
         "drift_pct": drift_pct,
         "speed_mae": speed_mae,
         "speed_rmse": speed_rmse,
-        "heading_error": heading_error,
+        "heading_error_mean": heading_error_mean,
+        "heading_error_rms": heading_error_rms,
+        "heading_error_final": heading_error_final,
+        "calib_confidence": calib_confidence,
         "plot_path": plot_path
     }
 
