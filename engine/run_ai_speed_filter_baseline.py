@@ -155,7 +155,7 @@ def run(
     plt.close()
 
     print("\n" + "="*60)
-    print("PHASE 3 EVALUATION RESULTS (Session S1 - 60s Window)")
+    print(f"PHASE 3 EVALUATION RESULTS ({driver} / {session} - {window_sec:.0f}s Window)")
     print("="*60)
     print(f"Ground Truth Distance:           {gt_dist:.2f} m")
     print(f"Phase 2 Strapdown Final Error:   {strapdown_err:.2f} m")

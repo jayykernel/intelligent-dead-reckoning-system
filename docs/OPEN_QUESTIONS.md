@@ -18,6 +18,27 @@ Format:
 
 ---
 
+## [Phase 3] TFLite export infeasibility on Python 3.14
+**Date**: 2026-09-17
+**Issue**: The Phase 3 exit criteria require a TFLite model export. Originally attempted on Python 3.14.0, where TensorFlow (and its TFLite converter) does not provide stable wheel support, leading to installation failure.
+**Options considered**:
+  - Option A: Use PyTorch to train and export to ONNX. (Rejected: Architectural translation risk; CNN/GRU architectures convert less reliably through PyTorch→ONNX→TFLite).
+  - Option B: Set up a pinned virtual environment (Python 3.11) with a stable TensorFlow release and train natively in TF/Keras.
+**Decision made**: Option B.
+**Resolution**: The root cause was a Python/TensorFlow version mismatch (an environment problem), not an architectural blocker. Created a pinned Python 3.11 virtual environment under `/training/venv`, installed TensorFlow/tf-keras, and rewrote `train_speed_filter.py` purely in TF/Keras for native TFLite export. ONNX is specifically disallowed.
+
+---
+
+## [Phase 3] Train/test leakage caught and corrected
+**Date**: 2026-09-17
+**Issue**: Initial Phase 3 drift evaluation was run on session S1 (Driver A), which is in TRAIN_SESSIONS per `training/dataset_splits.py`. The reported 90.7% drift reduction (2148.91% → 199.55%) is in-sample and overstates generalization performance — the model saw this exact session during training.
+**Resolution**: Caught before the Screening Package was finalized. Re-ran evaluation on held-out TEST_SESSIONS only:
+  - **S4 (Driver A)**: Same driver/vehicle as baseline, genuinely held out. 60s window: 4651.03% → 190.18% drift (95.91% reduction), MAE 3.72 m/s.
+  - **Vta26 (Driver E)**: Different driver/vehicle. 60s window: 1518.29% → 204.83% drift (86.51% reduction), MAE 4.79 m/s.
+**Decision made**: S1 in-sample numbers are excluded from the Screening Package headline results. Only S4 and Vta26 held-out test results are reported as representative of generalization. S1 numbers retained in internal docs for reference only, clearly labeled "in-sample, not representative."
+
+
+
 ## [Phase 1] Two-wheeler data bridge approach for N1 validation
 **Date**: 2026-09-17
 **Issue**: IO-VNBD contains no two-wheeler data. The lean-compensated NHC (N1)
