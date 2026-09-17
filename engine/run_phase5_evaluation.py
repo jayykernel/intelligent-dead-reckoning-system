@@ -302,6 +302,21 @@ def run_evaluation(
     speed_mae = float(np.mean(np.abs(speed_est - gt_speed)))
     speed_rmse = float(np.sqrt(np.mean((speed_est - gt_speed)**2)))
 
+    # Heading error (final heading vs GT)
+    gt_heading = synced["gt_heading"].values
+    if np.any(np.isnan(gt_heading)):
+        gt_heading = np.interp(np.arange(len(gt_heading)), np.where(~np.isnan(gt_heading))[0], gt_heading[~np.isnan(gt_heading)])
+
+    final_gt_heading = gt_heading[-1]
+    q_final = quat[-1]
+    psi_final = np.arctan2(2.0 * (q_final[0] * q_final[3] + q_final[1] * q_final[2]), 1.0 - 2.0 * (q_final[2]**2 + q_final[3]**2))
+
+    q0 = quat[0]
+    psi_0 = np.arctan2(2.0 * (q0[0] * q0[3] + q0[1] * q0[2]), 1.0 - 2.0 * (q0[2]**2 + q0[3]**2))
+
+    est_final_heading = gt_heading_0 + np.degrees(np.unwrap([0.0, psi_final - psi_0])[1])
+    heading_error = abs((est_final_heading - final_gt_heading + 180) % 360 - 180)
+
     # Generate comparison plot
     out_dir = os.path.join("data/processed/phase5_eval", data_type, session)
     os.makedirs(out_dir, exist_ok=True)
@@ -340,6 +355,7 @@ def run_evaluation(
     print(f"  Phase 5 Drift %:                 {drift_pct:.2f}%")
     print(f"  Speed MAE:                       {speed_mae:.2f} m/s")
     print(f"  Speed RMSE:                      {speed_rmse:.2f} m/s")
+    print(f"  Heading Error (Final):           {heading_error:.2f} deg")
     print(f"  Plot saved to:                   {plot_path}")
 
     return {
@@ -348,6 +364,7 @@ def run_evaluation(
         "drift_pct": drift_pct,
         "speed_mae": speed_mae,
         "speed_rmse": speed_rmse,
+        "heading_error": heading_error,
         "plot_path": plot_path
     }
 

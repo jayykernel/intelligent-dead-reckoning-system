@@ -38,6 +38,7 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
   - Final Position Error: 1,652.23 m
   - Drift %: **100.44%**
   - Speed MAE: 5.47 m/s | Speed RMSE: 7.79 m/s
+  - Final Heading Error: **3.12°**
   - **Relative Drift Reduction**: **99.39% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/tw/session1/session1_phase5_comparison.png`
 
@@ -51,6 +52,7 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
   - Final Position Error: 517.68 m
   - Drift %: **140.38%**
   - Speed MAE: 4.89 m/s | Speed RMSE: 8.81 m/s
+  - Final Heading Error: **120.80°**
   - **Relative Drift Reduction**: **98.82% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/tw/session2/session2_phase5_comparison.png`
 
@@ -68,6 +70,7 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
   - Final Position Error: 2,313.59 m
   - Drift %: **88.72%**
   - Speed MAE: 6.83 m/s | Speed RMSE: 8.33 m/s
+  - Final Heading Error: **126.40°**
   - **Relative Drift Reduction**: **98.94% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/car/S4/S4_phase5_comparison.png`
 
@@ -81,14 +84,16 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
   - Final Position Error: 2,111.58 m
   - Drift %: **201.23%**
   - Speed MAE: 6.19 m/s | Speed RMSE: 11.91 m/s
+  - Final Heading Error: **144.02°**
   - **Relative Drift Reduction**: **96.54% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/car/Vta26/Vta26_phase5_comparison.png`
 
 ---
 
 ## 4. Key Takeaways & Transition to Phase 6
-1. **Divergence Prevention**: Applying NHC and ZUPT eliminates vertical and lateral runaway velocity errors, reducing baseline unconstrained INS drift by >98% across all vehicle types and sessions.
-2. **Classification & Lean Compensation**:
-   - The vibration classifier accurately maintains the vehicle modality.
+1. **Divergence Prevention**: Applying NHC and ZUPT eliminates vertical and lateral runaway velocity errors, reducing baseline unconstrained INS drift by >96% across all vehicle types and sessions.
+2. **Heading Limitation (Phase 5 Scope)**: As in Phase 3, it is critical to state that while the $>96\%$ drift reduction looks immense, the absolute drift is still 88-200%. This is because Phase 5 constraints (NHC, ZUPT, Lean-Compensation) strictly bound **velocity magnitude and lateral slide**. They do **not** correct yaw/heading orientation. The uncorrected orientation error (e.g. 120-144° deviation from ground truth) bends the purely magnitude-bounded velocity vector into massive position divergence. This is the exact pattern identified in Phase 3, and it is left for Phase 6's GNSS+INS NIS-gated fusion framework to actually correct.
+3. **Classification & Lean Compensation**:
+   - The vibration classifier accurately maintains the vehicle modality using hysteresis (requiring a 5-window sustained agreement block to change prediction state).
    - Lean-compensated NHC prevents false lateral non-holonomic velocity damping during turning/banking maneuvers on two-wheelers.
-3. **Upcoming Fusion (Phase 6)**: The remaining open-loop drift (~80-140%) is primarily driven by gyro yaw drift and speed scaling errors during extended blackout windows; this will be tightly bound in Phase 6 with the GNSS+INS fusion engine (EKF/UKF + NIS innovation gating).
+4. **Upcoming Fusion (Phase 6)**: The remaining open-loop drift (~88-200%) is primarily driven by gyro yaw drift during extended blackout windows; this will be tightly bound in Phase 6 with the GNSS+INS fusion engine (EKF/UKF + NIS innovation gating).
