@@ -37,6 +37,7 @@ average absolute error in m/s.
 | Ground Truth Distance | 153.10 m | 153.10 m | — |
 | Final Position Error | 7120.71 m | 291.17 m | **95.91% reduction** |
 | Drift % | 4651.03% | 190.18% | **4460.84 pp** |
+| Final Heading Error | 77.3° | 77.3° (uncorrected gyro) | — |
 | Speed MAE | — | 3.72 m/s | **149.4% of average speed** |
 | Speed RMSE | — | 4.46 m/s | — |
 | **60s window context** | — | — | — |
@@ -50,6 +51,7 @@ average absolute error in m/s.
 | Ground Truth Distance | 574.30 m | 574.30 m | — |
 | Final Position Error | 8719.54 m | 1176.33 m | **86.51% reduction** |
 | Drift % | 1518.29% | 204.83% | **1313.46 pp** |
+| Final Heading Error | 151.1° | 151.1° (uncorrected gyro) | — |
 | Speed MAE | — | 4.79 m/s | **52.1% of average speed** |
 | Speed RMSE | — | 5.78 m/s | — |
 | **60s window context** | — | — | — |
@@ -59,9 +61,9 @@ average absolute error in m/s.
 
 **Cross-driver generalization confirmed**: The model trained on Driver A+E sessions generalizes to held-out sessions from both the same driver (S4) and a different driver (Vta26), achieving >85% drift reduction in both cases. Note the MAE is higher on S4 (3.72 vs 4.79 m/s) but S4's average speed is much lower (2.49 vs 9.20 m/s), making the relative error 149% vs 52% respectively — the filter performs proportionally better on higher-speed driving.
 
-**Cross-driver generalization confirmed**: The model trained on Driver A+E sessions generalizes to held-out sessions from both the same driver (S4) and a different driver (Vta26), achieving >85% drift reduction in both cases.
+**Speed estimation vs. drift reduction**: While the MAE/RMSE figures for speed estimation might seem high in relative terms (e.g., ~150% of average speed during low-speed driving in S4), the 86–96% drift reduction is achieved because the AI filter effectively bounds the vehicle speed to a physically plausible range, preventing the noise-driven runaway velocity integral typical of raw INS. The filter acts as a robust kinematic constraint rather than a high-precision point-velocity sensor, which is the primary driver of the massive reduction in positional drift.
 
-Note on speed estimation precision: While the MAE/RMSE figures for speed estimation might seem high in relative terms (e.g., ~150% of average speed during low-speed driving in S4), the 86–96% drift reduction is achieved because the AI filter effectively bounds the vehicle speed to a physically plausible range, preventing the noise-driven runaway velocity integral typical of raw INS. The filter acts as a robust kinematic constraint rather than a high-precision point-velocity sensor, which is the primary driver of the massive reduction in positional drift.
+**Important Caveat on Heading & Trajectory Orientation**: In Phase 3, only forward speed magnitude is estimated by the AI filter. Heading and attitude are still derived from open-loop gyro integration without gyro bias estimation, Non-Holonomic Constraints (NHC), or GNSS/magnetometer fusion. Consequently, while the distance traveled is bounded correctly, the trajectory orientation accumulates severe heading error (e.g., 77.3° error on S4, 151.1° on Vta26 over 60 seconds). The reported drift reduction numbers reflect **distance-magnitude bounding only, not route accuracy**. Heading and directional drift will be corrected in Phase 5 (NHC + ZUPT constraints) and Phase 6 (full EKF/UKF sensor fusion).
 
 ---
 

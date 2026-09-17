@@ -63,6 +63,7 @@ never saw during training.
 | Final Position Error | 7120.71 m | 291.17 m |
 | Drift % | 4651.03% | **190.18%** |
 | **Drift Reduction** | — | **95.91%** |
+| Final Heading Error | 77.3° | 77.3° (uncorrected gyro) |
 | Speed MAE | — | 3.72 m/s (**149.4% of avg speed**) |
 | Speed RMSE | — | 4.46 m/s |
 | **60s window context** | — | — |
@@ -78,6 +79,7 @@ never saw during training.
 | Final Position Error | 8719.54 m | 1176.33 m |
 | Drift % | 1518.29% | **204.83%** |
 | **Drift Reduction** | — | **86.51%** |
+| Final Heading Error | 151.1° | 151.1° (uncorrected gyro) |
 | Speed MAE | — | 4.79 m/s (**52.1% of avg speed**) |
 | Speed RMSE | — | 5.78 m/s |
 | **60s window context** | — | — |
@@ -89,7 +91,9 @@ never saw during training.
 training drivers to held-out sessions from both the same driver (S4, 96%
 reduction) and a different driver (Vta26, 87% reduction).
 
-Note on speed estimation precision: While the MAE/RMSE figures for speed estimation might seem high in relative terms, the 86–96% drift reduction is achieved because the AI filter effectively bounds the vehicle speed to a physically plausible range, preventing the noise-driven runaway velocity integral typical of raw INS. The filter acts as a robust kinematic constraint rather than a high-precision point-velocity sensor, which is the primary driver of the massive reduction in positional drift.
+**Speed estimation vs. drift reduction**: While the MAE/RMSE figures for speed estimation might seem high in relative terms, the 86–96% drift reduction is achieved because the AI filter effectively bounds the vehicle speed to a physically plausible range, preventing the noise-driven runaway velocity integral typical of raw INS. The filter acts as a robust kinematic constraint rather than a high-precision point-velocity sensor, which is the primary driver of the massive reduction in positional drift.
+
+**Important Caveat on Heading & Trajectory Orientation**: In Phase 3, only forward speed magnitude is estimated by the AI filter. Heading and attitude are still derived from open-loop gyro integration without gyro bias estimation, Non-Holonomic Constraints (NHC), or GNSS/magnetometer fusion. Consequently, while the distance traveled is bounded correctly, the trajectory orientation accumulates severe heading error (e.g., 77.3° error on S4, 151.1° on Vta26 over 60 seconds). The reported drift reduction numbers reflect **distance-magnitude bounding only, not route accuracy**. Heading and directional drift will be corrected in Phase 5 (NHC + ZUPT constraints) and Phase 6 (full EKF/UKF sensor fusion).
 
 ### 3.3 Summary
 
