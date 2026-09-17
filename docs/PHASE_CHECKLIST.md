@@ -19,10 +19,10 @@ execution protocol and commit convention.
 ---
 
 ### Phase 1 — Data Pipeline
-- [ ] IO-VNBD downloaded, parsed, documented (format, fields, coordinate frame)
-- [ ] Preprocessing pipeline: sync/resample IMU streams, unit normalization
-- [ ] Train/test split defined and fixed (recorded, not re-randomized later)
-- [ ] Decision recorded in `docs/OPEN_QUESTIONS.md`: which two-wheeler data
+- [x] IO-VNBD downloaded, parsed, documented (format, fields, coordinate frame)
+- [x] Preprocessing pipeline: sync/resample IMU streams, unit normalization
+- [x] Train/test split defined and fixed (recorded, not re-randomized later)
+- [x] Decision recorded in `docs/OPEN_QUESTIONS.md`: which two-wheeler data
   bridge approach was chosen (self-collected vs synthetic), per N1 spec
 - **Exit criteria**: a script that loads a raw IO-VNBD session and outputs a
   clean, synced, normalized array, with a sanity-check plot of raw trajectory.
