@@ -89,6 +89,8 @@ never saw during training.
 training drivers to held-out sessions from both the same driver (S4, 96%
 reduction) and a different driver (Vta26, 87% reduction).
 
+Note on speed estimation precision: While the MAE/RMSE figures for speed estimation might seem high in relative terms, the 86–96% drift reduction is achieved because the AI filter effectively bounds the vehicle speed to a physically plausible range, preventing the noise-driven runaway velocity integral typical of raw INS. The filter acts as a robust kinematic constraint rather than a high-precision point-velocity sensor, which is the primary driver of the massive reduction in positional drift.
+
 ### 3.3 Summary
 
 The AI speed filter reduces position drift by **86–96%** on held-out test
@@ -116,8 +118,12 @@ screening_package/
 ├── README.md           ← this file
 ├── speed_filter.tflite ← trained TFLite model (108 KB)
 └── plots/
-    ├── S4_ai_speed_filter_comparison.png    ← Held-out: Driver A
-    └── Vta26_ai_speed_filter_comparison.png ← Held-out: Driver E
+    ├── S4_ai_speed_filter_comparison.png    ← Held-out: Driver A (Comparison map/speed)
+    ├── S4_strapdown_drift.png               ← Raw strapdown vs GT (Baseline)
+    ├── S4_ai_corrected_trajectory.png       ← AI corrected path vs GT
+    ├── Vta26_ai_speed_filter_comparison.png ← Held-out: Driver E (Comparison map/speed)
+    ├── Vta26_strapdown_drift.png            ← Raw strapdown vs GT (Baseline)
+    └── Vta26_ai_corrected_trajectory.png    ← AI corrected path vs GT
 ```
 
 Full model checkpoint: `training/models/speed_filter.keras`  

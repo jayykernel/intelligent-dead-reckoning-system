@@ -77,3 +77,25 @@ Synchronized reference data from high-precision vehicle CAN/OBD system and refer
   - +Z: Upwards perpendicular to road surface
 - **Navigation Frame**:
   - Local East-North-Up (ENU) tangent plane relative to reference origin.
+
+## Session Characteristics (for baseline interpretation)
+
+### Session S1 (Driver A)
+| Metric | Value |
+|--------|-------|
+| Total Duration | 5174.4 s (86.2 min) |
+| Average Speed | 7.33 m/s (26.40 km/h) |
+| Max Speed | 26.07 m/s (93.83 km/h) |
+| Stationary Time (<0.5 m/s) | 11.1% |
+| Total Distance | 37,948.4 m |
+| Driving Pattern | Mixed urban/suburban with frequent stops |
+
+**60-second baseline window** (used in Phase 2 drift measurement):
+| Metric | Value |
+|--------|-------|
+| Average Speed | 1.55 m/s (5.56 km/h) |
+| Stationary Time | 72.3% |
+| Distance | 92.7 m |
+| Path Length | 96.82 m |
+
+*Note: The high stationary percentage (72.3%) in the 60-second window reflects initial idle departure, making it a challenging baseline for velocity estimation. The Phase 2 drift of 2148.91% is measured against this low-motion segment.*

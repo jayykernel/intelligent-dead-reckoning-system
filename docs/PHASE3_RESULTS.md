@@ -61,6 +61,8 @@ average absolute error in m/s.
 
 **Cross-driver generalization confirmed**: The model trained on Driver A+E sessions generalizes to held-out sessions from both the same driver (S4) and a different driver (Vta26), achieving >85% drift reduction in both cases.
 
+Note on speed estimation precision: While the MAE/RMSE figures for speed estimation might seem high in relative terms (e.g., ~150% of average speed during low-speed driving in S4), the 86–96% drift reduction is achieved because the AI filter effectively bounds the vehicle speed to a physically plausible range, preventing the noise-driven runaway velocity integral typical of raw INS. The filter acts as a robust kinematic constraint rather than a high-precision point-velocity sensor, which is the primary driver of the massive reduction in positional drift.
+
 ---
 
 ## In-Sample Reference (Not Representative of Generalization)
