@@ -42,10 +42,10 @@ execution protocol and commit convention.
 ---
 
 ### Phase 3 — AI Speed & Vibration Filter (training)
-- [ ] Model architecture chosen and documented (CNN/GRU per problem statement)
-- [ ] Trained on IO-VNBD subset in `/training`
-- [ ] Exported to TFLite, size/latency checked against mobile feasibility
-- [ ] Inference re-run through `/engine`, drift re-measured vs Phase 2 baseline
+- [x] Model architecture chosen and documented (CNN/GRU per problem statement)
+- [x] Trained on IO-VNBD subset in `/training`
+- [x] Exported to TFLite, size/latency checked against mobile feasibility
+- [x] Inference re-run through `/engine`, drift re-measured vs Phase 2 baseline
 - **Exit criteria**: measurable drift improvement over Phase 2 baseline, with
   a position plot, saved model checkpoint, and TFLite export present in
   `/training/models`.
