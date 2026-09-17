@@ -90,10 +90,28 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
 
 ---
 
-## 4. Key Takeaways & Transition to Phase 6
+## 4. In-Depth Analysis & Architectural Validation
+
+### A. Strict Open-Loop IMU Boundary
+No module in Phase 5 (Vehicle Classifier, Lean-Angle EKF, Constrained INS, or evaluation integration loop) references or feeds back GPS location, speed, or heading fields during integration. Ground-truth heading and position are queried strictly at $t=0$ for initial state initialization ($p_0, v_0, \psi_0$), and thereafter all updates proceed purely via raw/calibrated IMU measurements in open-loop.
+
+### B. Two-Wheeler Heading Error Disparity (Session 1 vs Session 2)
+While the final heading error for Session 1 was **3.12°** vs **120.80°** for Session 2, trajectory-wide analysis reveals:
+- **Session 1 (335.9s, 1645.7m)**: Trajectory straightness ratio was 0.699. The mean trajectory heading error was **78.30°** (peak error 179.98°). The low final heading error (3.12°) was a geometric coincidence where the end-of-route turn happened to align with the uncorrected gyro integration direction at $t=T_{\text{final}}$, not superior gyro tracking.
+- **Session 2 (173.7s, 368.9m)**: Trajectory straightness ratio was 0.545, with tight turns and higher heading variance (std = 124.1° vs 76.0° in Session 1). Mean trajectory heading error was **86.12°**, ending with a final deviation of **120.80°**.
+Both sessions show typical open-loop gyro heading drift of ~80° on average over 3–5 minutes.
+
+### C. Car-Side NHC/ZUPT Benefit Disparity (S4 vs Vta26)
+While NHC/ZUPT substantially improved S4 drift down to 88.72% (from 8376% unconstrained baseline), Vta26 drift remained at 201.23% (vs 5822% unconstrained baseline):
+1. **Turn Density & Kinematic Violations**: Vta26 is a highly turn-dense urban route (~1.90 deg/m of cumulative heading change, compared to ~0.98 deg/m in S4). Standard NHC assumes zero lateral velocity ($v_y = 0$ in vehicle frame). During aggressive turns and high lateral acceleration (where mean moving yaw rate was 5.51 deg/s in Vta26 vs 3.47 deg/s in S4), tire slip angle and chassis roll violate the rigid straight-line kinematic assumption, causing lateral constraint errors.
+2. **Initial Calibration Fallback**: Vta26 lacked sufficient initial stationary data in the 60s calibration window to accurately estimate gyro bias and gravity tilt, triggering the identity fallback. S4 had a clean stationary initial phase that eliminated static gyro bias prior to integration.
+
+---
+
+## 5. Key Takeaways & Transition to Phase 6
 1. **Divergence Prevention**: Applying NHC and ZUPT eliminates vertical and lateral runaway velocity errors, reducing baseline unconstrained INS drift by >96% across all vehicle types and sessions.
-2. **Heading Limitation (Phase 5 Scope)**: As in Phase 3, it is critical to state that while the $>96\%$ drift reduction looks immense, the absolute drift is still 88-200%. This is because Phase 5 constraints (NHC, ZUPT, Lean-Compensation) strictly bound **velocity magnitude and lateral slide**. They do **not** correct yaw/heading orientation. The uncorrected orientation error (e.g. 120-144° deviation from ground truth) bends the purely magnitude-bounded velocity vector into massive position divergence. This is the exact pattern identified in Phase 3, and it is left for Phase 6's GNSS+INS NIS-gated fusion framework to actually correct.
+2. **Heading Limitation (Phase 5 Scope)**: As in Phase 3, it is critical to state that while the $>96\%$ drift reduction looks immense, the absolute drift is still 88-201%. This is because Phase 5 constraints (NHC, ZUPT, Lean-Compensation) strictly bound **velocity magnitude and lateral slide**. They do **not** correct yaw/heading orientation. The uncorrected orientation error (e.g. 120-144° deviation from ground truth) bends the purely magnitude-bounded velocity vector into massive position divergence. This is the exact pattern identified in Phase 3, and it is left for Phase 6's GNSS+INS NIS-gated fusion framework to actually correct.
 3. **Classification & Lean Compensation**:
    - The vibration classifier accurately maintains the vehicle modality using hysteresis (requiring a 5-window sustained agreement block to change prediction state).
    - Lean-compensated NHC prevents false lateral non-holonomic velocity damping during turning/banking maneuvers on two-wheelers.
-4. **Upcoming Fusion (Phase 6)**: The remaining open-loop drift (~88-200%) is primarily driven by gyro yaw drift during extended blackout windows; this will be tightly bound in Phase 6 with the GNSS+INS fusion engine (EKF/UKF + NIS innovation gating).
+4. **Upcoming Fusion (Phase 6)**: The remaining open-loop drift (~88-201%) is primarily driven by gyro yaw drift during extended blackout windows; this will be tightly bound in Phase 6 with the GNSS+INS fusion engine (EKF/UKF + NIS innovation gating).
