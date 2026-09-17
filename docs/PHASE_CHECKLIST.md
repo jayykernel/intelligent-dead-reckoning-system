@@ -54,10 +54,10 @@ execution protocol and commit convention.
 ---
 
 ### CHECKPOINT — Screening Package
-- [ ] `/screening_package` contains: trained preliminary AI model, position
+- [x] `/screening_package` contains: trained preliminary AI model, position
   plot from inference on IO-VNBD subset, short writeup per problem statement
   requirements
-- [ ] Package reviewed against the original problem statement's screening
+- [x] Package reviewed against the original problem statement's screening
   requirement before submission
 - **Exit criteria**: package is submission-ready. This is a hard gate — do
   not proceed to Phase 4 until this is done, since screening happens before
@@ -66,9 +66,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 4 — Alignment & Calibration Engine
-- [ ] Phone-frame → vehicle-frame rotation estimation implemented
-- [ ] Works for dashboard-mount and mobile-holder cases (per problem statement)
-- [ ] Per-device calibration routine (N8) implemented
+- [x] Phone-frame → vehicle-frame rotation estimation implemented
+- [x] Works for dashboard-mount and mobile-holder cases (per problem statement)
+- [x] Per-device calibration routine (N8) implemented
 - **Exit criteria**: calibration produces a stable rotation matrix within a
   bounded time window on test data; documented accuracy of alignment.
 - **DO NOT**: attempt handlebar/steering-yaw separation (explicitly out of
