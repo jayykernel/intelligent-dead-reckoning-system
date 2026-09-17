@@ -38,8 +38,14 @@ class GNSSINSFusionEngine:
         self.dt = dt
         self.enable_ai = enable_ai
 
-        # Core EKF
-        self.ekf = ErrorStateEKF(dt=dt)
+        # Core EKF with smartphone tuning
+        self.ekf = ErrorStateEKF(
+            dt=dt,
+            sigma_acc=1.0,           # Phone IMU has high noise/vibration
+            sigma_gyro=0.1,          # Gyro is also noisy
+            sigma_acc_bias=0.05,     # Aggressive bias tracking to handle mount shifts/pitch
+            sigma_gyro_bias=0.01
+        )
 
         # Calibration
         self.calib = CalibrationEngine()
@@ -139,8 +145,8 @@ class GNSSINSFusionEngine:
             p0=p0_enu,
             v0=v0_enu,
             q0=q0,
-            b_a0=self.calib.accel_bias,
-            b_g0=self.calib.gyro_bias
+            b_a0=np.zeros(3),  # Initial biases are 0 in EKF because calib.apply() pre-subtracts them
+            b_g0=np.zeros(3)
         )
 
         self.trajectory_pos.append(np.copy(p0_enu))
@@ -259,16 +265,45 @@ class GNSSINSFusionEngine:
         if is_gnss_available and gnss_pos_enu is not None:
             gnss_pos_passed, _, _ = self.ekf.update_gnss_position(
                 p_gnss_enu=gnss_pos_enu,
-                sigma_pos=10.0,
+                sigma_pos=5.0,
                 alpha=0.01,
                 timestamp=timestamp
             )
             if gnss_vel_enu is not None:
+                # GNSS velocity update with adaptive gating
+                # If yaw error is large, still apply velocity update but with increased sigma
+                speed_2d = np.linalg.norm(gnss_vel_enu[:2])
+                if speed_2d > 2.0:
+                    # At higher speeds, trust velocity more even if yaw is off
+                    sigma_vel_adaptive = 1.0
+                    alpha_vel = 0.05
+                else:
+                    sigma_vel_adaptive = 0.5
+                    alpha_vel = 0.01
+
                 gnss_vel_passed, _, _ = self.ekf.update_gnss_velocity(
                     v_gnss_enu=gnss_vel_enu,
-                    sigma_vel=0.5,
-                    alpha=0.01,
+                    sigma_vel=sigma_vel_adaptive,
+                    alpha=alpha_vel,
                     timestamp=timestamp
+                )
+                # GNSS Course-Over-Ground (COG) provides absolute heading
+                speed_2d = np.linalg.norm(gnss_vel_enu[:2])
+                # Apply COG heading update with adaptive uncertainty
+                # COG becomes unreliable at low speeds, so increase sigma_heading accordingly
+                # sigma_heading scales from 3° at 1.5 m/s to 10° at 0.3 m/s
+                if speed_2d >= 1.5:
+                    sigma_heading = np.radians(3.0)  # Tight heading estimate at higher speeds
+                else:
+                    sigma_heading = np.radians(3.0 + 7.0 * (1.5 - speed_2d) / 1.2)  # Looser at low speeds
+
+                cog_heading = float(np.arctan2(gnss_vel_enu[0], gnss_vel_enu[1]))
+                self.ekf.update_heading(
+                    heading_rad=cog_heading,
+                    sigma_heading=sigma_heading,
+                    alpha=0.01,
+                    timestamp=timestamp,
+                    source="GNSS_HEADING"
                 )
 
         # Record histories

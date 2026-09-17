@@ -104,14 +104,15 @@ class CalibrationEngine:
         """
         Apply calibration and rotation to turn raw phone IMU into vehicle-frame IMU.
         """
-        # Subtract biases
+        # Rotate gyro to vehicle frame (gyro_bias was computed in phone frame)
         gyro_corrected = gyro - self.gyro_bias
-        acc_corrected = acc - self.accel_bias
-        
-        # Rotate to vehicle frame
-        acc_veh = acc_corrected @ self.R_phone_to_veh.T
         gyro_veh = gyro_corrected @ self.R_phone_to_veh.T
-        
+
+        # Rotate raw acc to vehicle frame first
+        acc_veh = acc @ self.R_phone_to_veh.T
+        # Subtract accel_bias which is defined in Vehicle Frame ([0, 0, diff])
+        acc_veh = acc_veh - self.accel_bias
+
         return acc_veh, gyro_veh
 
     def check_misalignment_trigger(self, acc_window: np.ndarray, speed_window: np.ndarray, dt: float = 0.1, threshold_deg: float = 10.0) -> bool:

@@ -49,30 +49,30 @@ class ConstrainedINS:
             return np.zeros(3)
 
         if vehicle_type == 'car':
-            # Standard NHC: no lateral slide, no vertical velocity
+            # Standard NHC (Vehicle Frame: X Right, Y Forward, Z Up)
+            # No lateral slide (x = 0), no vertical velocity (z = 0)
             v_constrained = v_veh.copy()
-            v_constrained[1] = 0.0  # lateral (y)
+            v_constrained[0] = 0.0  # lateral (x)
             v_constrained[2] = 0.0  # vertical (z)
             return v_constrained
 
         elif vehicle_type == 'two_wheeler':
             # Lean-compensated NHC (N1)
-            # Transform velocity to road frame by rotating around x-axis (forward) by -lean_angle
-            # Road frame: x forward, y left, z up (when upright)
-            # When leaned by phi (positive = right lean), the road frame is rotated by -phi around x from vehicle frame.
+            # Forward is Y-axis. Roll/lean rotation is around Y-axis by -lean_angle.
             phi = lean_angle_rad
-            # Rotation matrix around x-axis by -phi
-            R_x = np.array([
-                [1, 0, 0],
-                [0, np.cos(phi), np.sin(phi)],
-                [0, -np.sin(phi), np.cos(phi)]
+            # Rotation matrix around Y-axis by -phi
+            c, s = np.cos(phi), np.sin(phi)
+            R_y = np.array([
+                [c, 0.0, s],
+                [0.0, 1.0, 0.0],
+                [-s, 0.0, c]
             ])
             # Transform to road frame
-            v_road = R_x @ v_veh
-            # Apply NHC in road frame: no lateral slide (y_road) and no vertical velocity (z_road)
-            v_road_constrained = np.array([v_road[0], 0.0, 0.0])
+            v_road = R_y @ v_veh
+            # Apply NHC in road frame: no lateral slide (x_road = 0) and no vertical velocity (z_road = 0)
+            v_road_constrained = np.array([0.0, v_road[1], 0.0])
             # Transform back to vehicle frame
-            v_constrained = R_x.T @ v_road_constrained  # Note: R_x.T is rotation by +phi
+            v_constrained = R_y.T @ v_road_constrained
             return v_constrained
 
         else:

@@ -61,7 +61,9 @@ def run_evaluation(
     speed = np.nan_to_num(speed, nan=0.0)
     mag = synced[["mag_x", "mag_y", "mag_z"]].values if "mag_x" in synced.columns else None
 
-    calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=dt)
+    calib_success = calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=dt)
+    if not calib_success:
+        print("  WARNING: Calibration failed, using identity transformation and zero bias.")
 
     # 2. Init Fusion Engine
     fusion = GNSSINSFusionEngine(dt=dt)

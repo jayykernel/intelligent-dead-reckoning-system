@@ -121,14 +121,14 @@ class ErrorStateEKF:
             sin_half = np.sin(half_angle)
             dq = np.array([np.cos(half_angle), axis[0] * sin_half, axis[1] * sin_half, axis[2] * sin_half])
 
-        # Quaternion multiplication: q_new = q * dq
+        # Quaternion multiplication: q_new = q * dq (body-frame rotation)
         qw, qx, qy, qz = self.q
-        dw, dx, dy, dz = dq # dq is in NAV frame! So q_new = dq * q
+        dw, dx, dy, dz = dq
         self.q = np.array([
-            dw*qw - dx*qx - dy*qy - dz*qz,
-            dw*qx + dx*qw + dy*qz - dz*qy,
-            dw*qy - dx*qz + dy*qw + dz*qx,
-            dw*qz + dx*qy - dy*qx + dz*qw
+            qw*dw - qx*dx - qy*dy - qz*dz,
+            qw*dx + qx*dw + qy*dz - qz*dy,
+            qw*dy - qx*dz + qy*dw + qz*dx,
+            qw*dz + qx*dy - qy*dx + qz*dw
         ])
         self.q = self.q / np.linalg.norm(self.q)
 
@@ -147,13 +147,18 @@ class ErrorStateEKF:
         # delta_x = [delta_p (0..2), delta_v (3..5), delta_theta (6..8), delta_b_a (9..11), delta_b_g (12..14)]
         F = np.eye(15)
         F[0:3, 3:6] = np.eye(3) * dt
-        F[0:3, 6:9] = -0.5 * self.skew_symmetric(f_nav) * dt**2
+        # F[0:3, 6:9] = -0.5 * R @ self.skew_symmetric(acc_corr) * dt**2 (using acc_corr as specific force)
+        F[0:3, 6:9] = -0.5 * R @ self.skew_symmetric(acc_corr) * dt**2
         F[0:3, 9:12] = 0.5 * R * dt**2
 
-        F[3:6, 6:9] = -self.skew_symmetric(f_nav) * dt
+        # F[3:6, 6:9] = - R @ self.skew_symmetric(acc_corr) * dt
+        F[3:6, 6:9] = -R @ self.skew_symmetric(acc_corr) * dt
         F[3:6, 9:12] = R * dt
 
-        F[6:9, 12:15] = -R * dt
+        # F[6:9, 6:9] = I - skew(gyro_corr) * dt
+        F[6:9, 6:9] = np.eye(3) - self.skew_symmetric(gyro_corr) * dt
+        # F[6:9, 12:15] = -I * dt (Bias is in Body frame)
+        F[6:9, 12:15] = -np.eye(3) * dt
 
         # 6. Process Noise Covariance Q
         Q = np.zeros((15, 15))
@@ -217,13 +222,6 @@ class ErrorStateEKF:
         chi2_thresh = float(chi2.ppf(1.0 - alpha, df=dof))
         passed = nis <= chi2_thresh
 
-        # DEBUG
-        if not passed and (nis > chi2_thresh * 10):
-            print(f"DEBUG: {update_type} REJECTED: NIS={nis:.2f}, Threshold={chi2_thresh:.2f}")
-            print(f"  Y: {y}")
-            # print(f"  S_diag: {np.diag(S)}")
-            print(f"  P_diag (first 6): {np.diag(self.P[0:6, 0:6])}")
-
         # Log NIS event
         self.nis_history.append({
             "timestamp": timestamp,
@@ -276,13 +274,14 @@ class ErrorStateEKF:
             half = d_angle / 2.0
             dq = np.array([np.cos(half), axis[0]*np.sin(half), axis[1]*np.sin(half), axis[2]*np.sin(half)])
 
+        # q_new = q * dq (body-frame correction)
         qw, qx, qy, qz = self.q
-        dw, dx, dy, dz = dq # dq is in NAV frame! So q_new = dq * q
+        dw, dx, dy, dz = dq
         self.q = np.array([
-            dw*qw - dx*qx - dy*qy - dz*qz,
-            dw*qx + dx*qw + dy*qz - dz*qy,
-            dw*qy - dx*qz + dy*qw + dz*qx,
-            dw*qz + dx*qy - dy*qx + dz*qw
+            qw*dw - qx*dx - qy*dy - qz*dz,
+            qw*dx + qx*dw + qy*dz - qz*dy,
+            qw*dy - qx*dz + qy*dw + qz*dx,
+            qw*dz + qx*dy - qy*dx + qz*dw
         ])
         self.q = self.q / np.linalg.norm(self.q)
 
