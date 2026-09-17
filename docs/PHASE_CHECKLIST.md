@@ -77,12 +77,12 @@ execution protocol and commit convention.
 ---
 
 ### Phase 5 — Vehicle-Type Classifier + NHC/ZUPT (incl. lean-compensated)
-- [ ] Vehicle-type classifier (N6) trained and integrated
-- [ ] Standard NHC + ZUPT implemented for car/truck
-- [ ] Lean-angle EKF estimator implemented for two-wheeler
-- [ ] Lean-compensated NHC (N1) implemented and applied only when classified
+- [x] Vehicle-type classifier (N6) trained and integrated
+- [x] Standard NHC + ZUPT implemented for car/truck
+- [x] Lean-angle EKF estimator implemented for two-wheeler
+- [x] Lean-compensated NHC (N1) implemented and applied only when classified
   as two-wheeler
-- [ ] Validated against the two-wheeler data source decided in Phase 1
+- [x] Validated against the two-wheeler data source decided in Phase 1
 - **Exit criteria**: drift improvement measured separately for car (IO-VNBD)
   and two-wheeler (chosen bridge dataset) paths, clearly labeled as such.
 - **DO NOT**: claim two-wheeler validation on IO-VNBD data anywhere.

@@ -1,0 +1,65 @@
+"""
+Lean-Angle EKF Estimator (N1)
+
+Estimates the roll/lean angle of a two-wheeler in real-time
+using gyro roll rates and specific force / kinematic-based lean inference.
+"""
+
+import numpy as np
+
+class LeanAngleEKF:
+    def __init__(self, dt: float = 0.1, q_phi: float = 1e-3, q_bias: float = 1e-5, r_meas: float = 0.1):
+        self.dt = dt
+        # State: [lean_angle (rad), roll_gyro_bias (rad/s)]
+        self.x = np.zeros(2)
+        # Covariance
+        self.P = np.eye(2) * 0.01
+
+        # Process noise covariance
+        self.Q = np.diag([q_phi, q_bias])
+        # Measurement noise covariance
+        self.R = r_meas
+
+    def predict(self, gyro_y: float):
+        """
+        Propagate lean angle using forward-axis roll gyro.
+        """
+        phi, b = self.x
+        omega = gyro_y - b
+
+        # State transition: phi_k+1 = phi_k + omega * dt
+        self.x[0] = phi + omega * self.dt
+
+        # Jacobian F = [[1, -dt], [0, 1]]
+        F = np.array([[1.0, -self.dt], [0.0, 1.0]])
+        self.P = F @ self.P @ F.T + self.Q
+
+        return self.x[0]
+
+    def update(self, acc_x: float, acc_z: float, speed: float = 0.0, gyro_z: float = 0.0, g: float = 9.81):
+        """
+        Measurement update using apparent gravity vector and/or kinematic lean angle.
+        """
+        # When moving, calculate kinematic expected roll vs static accel roll
+        if speed > 1.0 and abs(gyro_z) > 0.05:
+            # Centripetal acceleration balance: tan(phi) = v * omega_z / g
+            phi_meas = np.arctan((speed * gyro_z) / g)
+        else:
+            # Low speed / stationary: use lateral vs vertical specific force
+            phi_meas = np.arctan2(acc_x, acc_z)
+
+        # Measurement Jacobian H = [1, 0]
+        H = np.array([[1.0, 0.0]])
+        z = phi_meas
+        y = z - self.x[0] # Innovation
+
+        S = H @ self.P @ H.T + self.R
+        K = self.P @ H.T / S
+
+        self.x = self.x + K.flatten() * y
+        self.P = (np.eye(2) - K @ H) @ self.P
+
+        return self.x[0]
+
+    def get_lean_angle_deg(self) -> float:
+        return np.degrees(self.x[0])
