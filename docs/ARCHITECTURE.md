@@ -50,8 +50,10 @@ flowchart TD
 ## 3. Module contracts (I/O — do not change without updating this file)
 
 ### Alignment & Calibration Engine
-- In: raw accel/gyro/mag stream (stationary + initial-drive window)
+- In: raw accel/gyro/mag stream + GNSS speed (stationary + initial-drive window)
 - Out: rotation matrix (phone frame → vehicle frame), confidence score
+- Why GNSS speed is required: Real two-wheeler stop/start patterns in traffic produce gentle accelerations and high engine-idling vibrations that make pure-IMU stationary and acceleration detection unreliable. GNSS speed provides the external ground truth needed during the initial calibration window to cleanly isolate true stationary gravity and true forward acceleration.
+- Product Constraint (GNSS-Denied Cold Start): If GNSS is unavailable during the initial calibration window (e.g., cold start inside a parking structure), the calibrator cannot confidently identify the forward axis. It will emit a confidence score of `0.0` and gracefully degrade to an identity transformation (assuming phone frame = vehicle frame), relying entirely on the downstream GNSS+INS Fusion block (Phase 6) to correct the resulting trajectory drift once GNSS is regained.
 - Re-triggers: if residual misalignment error exceeds threshold during drive
 
 ### Vehicle-Type Classifier
