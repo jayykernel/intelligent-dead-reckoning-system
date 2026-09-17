@@ -1,0 +1,9 @@
+# Engine runtime dependencies (inference + classical filtering)
+numpy>=1.26.0
+scipy>=1.13.0
+
+# Utilities
+pyyaml>=6.0.1
+
+# Testing
+pytest>=8.0.0
