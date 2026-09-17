@@ -31,9 +31,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 2 — Classical Strapdown INS Baseline (no AI yet)
-- [ ] Physics-only strapdown mechanization implemented in `/engine`
-- [ ] Run on IO-VNBD subset, measure raw drift (no AI, no constraints)
-- [ ] This becomes the baseline number all later phases are compared against
+- [x] Physics-only strapdown mechanization implemented in `/engine`
+- [x] Run on IO-VNBD subset, measure raw drift (no AI, no constraints)
+- [x] This becomes the baseline number all later phases are compared against
 - **Exit criteria**: drift plot + drift percentage documented for baseline.
   This number should be bad (that's expected — it's the "why we need AI" proof).
 - **DO NOT**: add NHC, ZUPT, or AI correction yet — this phase must be pure
