@@ -101,7 +101,8 @@ def preprocess_session(
     # 3. Ground Truth from V file
     gt_lat = np.interp(uniform_time, v_time, v_df['Latitude (degrees)'])
     gt_lon = np.interp(uniform_time, v_time, v_df['Longitude (degrees)'])
-    gt_alt = np.interp(uniform_time, v_time, v_df['Height (km)'] * 1000.0)
+    # Height in V file is in meters (labeled as 'Height (km)' in header due to dataset typo)
+    gt_alt = np.interp(uniform_time, v_time, v_df['Height (km)'])
     gt_speed = np.interp(uniform_time, v_time, v_df['Velocity (km/hr)']) / 3.6
     gt_heading = np.interp(uniform_time, v_time, v_df['Heading (degrees)'])
 
@@ -177,3 +178,72 @@ def latlon_to_enu(
     up = np.cos(phi0) * np.cos(lam0) * dX + np.cos(phi0) * np.sin(lam0) * dY + np.sin(phi0) * dZ
 
     return east, north, up
+
+
+
+
+def load_two_wheeler_session(data_dir: str, session: str, target_dt: float = 0.1) -> pd.DataFrame:
+    """
+    Load and preprocess a two-wheeler session dataset.
+    Interpolates all sensors to target_dt.
+    """
+    session_dir = os.path.join(data_dir, session)
+
+    acc_df = pd.read_csv(os.path.join(session_dir, "Accelerometer.csv"))
+    gyr_df = pd.read_csv(os.path.join(session_dir, "Gyroscope.csv"))
+    loc_df = pd.read_csv(os.path.join(session_dir, "Location.csv"))
+    mag_df = pd.read_csv(os.path.join(session_dir, "Magnetometer.csv"))
+
+    # Clean headers
+    for df in [acc_df, gyr_df, loc_df, mag_df]:
+        df.columns = [c.strip().replace('"', '') for c in df.columns]
+
+    time_acc = acc_df['Time (s)'].values
+    time_gyr = gyr_df['Time (s)'].values
+    time_loc = loc_df['Time (s)'].values
+
+    # We want a common time vector
+    t_start = max(time_acc[0], time_gyr[0], time_loc[0])
+    t_end = min(time_acc[-1], time_gyr[-1], time_loc[-1])
+
+    uniform_time = np.arange(t_start, t_end, target_dt)
+
+    acc_x = np.interp(uniform_time, time_acc, acc_df.filter(like='Acceleration x').iloc[:, 0])
+    acc_y = np.interp(uniform_time, time_acc, acc_df.filter(like='Acceleration y').iloc[:, 0])
+    acc_z = np.interp(uniform_time, time_acc, acc_df.filter(like='Acceleration z').iloc[:, 0])
+
+    gyro_x = np.interp(uniform_time, time_gyr, gyr_df.filter(like='Gyroscope x').iloc[:, 0])
+    gyro_y = np.interp(uniform_time, time_gyr, gyr_df.filter(like='Gyroscope y').iloc[:, 0])
+    gyro_z = np.interp(uniform_time, time_gyr, gyr_df.filter(like='Gyroscope z').iloc[:, 0])
+
+    mag_x = np.interp(uniform_time, mag_df.iloc[:, 0], mag_df.filter(like='Magnetic field x').iloc[:, 0])
+    mag_y = np.interp(uniform_time, mag_df.iloc[:, 0], mag_df.filter(like='Magnetic field y').iloc[:, 0])
+    mag_z = np.interp(uniform_time, mag_df.iloc[:, 0], mag_df.filter(like='Magnetic field z').iloc[:, 0])
+
+    # Location (ground truth approximation)
+    loc_lat = np.interp(uniform_time, time_loc, loc_df.filter(like='Latitude').iloc[:, 0])
+    loc_lon = np.interp(uniform_time, time_loc, loc_df.filter(like='Longitude').iloc[:, 0])
+    loc_alt = np.interp(uniform_time, time_loc, loc_df.filter(like='Height').iloc[:, 0])
+
+    # Velocity might have NaNs, so ffill/bfill via pandas
+    vel_series = pd.Series(loc_df.filter(like='Velocity').iloc[:, 0]).interpolate(method='linear').bfill().ffill()
+    loc_vel = np.interp(uniform_time, time_loc, vel_series)
+
+    dir_series = pd.Series(loc_df.filter(like='Direction').iloc[:, 0]).interpolate(method='linear').bfill().ffill()
+    loc_heading = np.interp(uniform_time, time_loc, dir_series)
+
+    # Normalize time to start at 0
+    uniform_time = uniform_time - uniform_time[0]
+
+    synced_df = pd.DataFrame({
+        'time': uniform_time,
+        'acc_x': acc_x, 'acc_y': acc_y, 'acc_z': acc_z,
+        'gyro_x': gyro_x, 'gyro_y': gyro_y, 'gyro_z': gyro_z,
+        'mag_x': mag_x, 'mag_y': mag_y, 'mag_z': mag_z,
+        'phone_lat': loc_lat, 'phone_lon': loc_lon, 'phone_alt': loc_alt,
+        'phone_speed': loc_vel, 'phone_heading': loc_heading,
+        'gt_lat': loc_lat, 'gt_lon': loc_lon, 'gt_alt': loc_alt,
+        'gt_speed': loc_vel, 'gt_heading': loc_heading
+    })
+
+    return synced_df

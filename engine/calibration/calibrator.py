@@ -91,7 +91,13 @@ class CalibrationEngine:
         # Score is based on amount of data
         self.alignment_score = min(1.0, np.sum(accel_mask) / 50.0)
         self.is_calibrated = True
-        
+
+        # Accel bias in vehicle frame:
+        # Since we perfectly align Vehicle Z with g_phone, X and Y read 0 when stationary.
+        # However, Z reads norm(g_phone).
+        # Standard gravity in our EKF is 9.80665, so the difference is a sensor scale/bias error.
+        self.accel_bias = np.array([0.0, 0.0, np.linalg.norm(g_phone) - 9.80665], dtype=np.float64)
+
         return True
         
     def apply(self, acc: np.ndarray, gyro: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
