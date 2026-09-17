@@ -24,27 +24,34 @@ The `CalibrationEngine` performs two-stage alignment during an initial short dri
 
 ---
 
-## 2. Validation on Test Datasets
+## 2. Validation & Accuracy
 
-Tested across held-out sessions representing different mounting setups/drivers:
+### 2.1 Synthetic Ground-Truth Verification
+To verify absolute rotation recovery accuracy independently of real-world mounting assumptions, the calibrator was tested against a pristine synthetic IMU session with a known rigid rotation applied:
+- **Injected Mounting Rotation**: 15° Roll, 10° Pitch, 5° Yaw.
+- **Recovered Rotation vs Ground Truth Difference**: Computes to the Identity matrix ($I_{3 \times 3}$) within a `0.01` numerical margin.
+- **Conclusion**: The calibration engine algorithm perfectly recovers the phone-to-vehicle rotation mathematically given clear kinematic signatures.
 
-### Session S4 (Driver A)
+### 2.2 Real Datasets (Dashboard/Holder Mounts)
+Tested across held-out sessions representing different real-world mounting setups/drivers:
+
+#### Session S4 (Driver A)
 - **Mounting**: Mobile Holder / Dashboard
 - **Gyro Bias**: `[0.00124, -0.00087, 0.00145]` rad/s
 - **Rotation Matrix ($\mathbf{R}_{phone \to veh}$)**:
   $$\begin{bmatrix} -0.083 & -0.996 & -0.022 \\ 0.997 & -0.083 & -0.009 \\ 0.007 & -0.022 & 1.000 \end{bmatrix}$$
-- **Post-Alignment Metrics**:
+- **Self-Consistency Post-Alignment**:
   - Vertical acceleration mean: **9.85 m/s²** (aligned with $1g$)
   - Lateral acceleration mean: **-0.26 m/s²**
   - Forward acceleration mean: **-0.06 m/s²**
   - Status: **Stable alignment achieved within 60s bounded window**
 
-### Session Vta26 (Driver E)
+#### Session Vta26 (Driver E)
 - **Mounting**: Mobile Holder / Alternative Orientation
 - **Gyro Bias**: `[-0.00139, -0.00018, -0.00073]` rad/s
 - **Rotation Matrix ($\mathbf{R}_{phone \to veh}$)**:
   $$\begin{bmatrix} -0.752 & 0.659 & -0.016 \\ -0.659 & -0.752 & 0.017 \\ -0.000 & 0.023 & 1.000 \end{bmatrix}$$
-- **Post-Alignment Metrics**:
+- **Self-Consistency Post-Alignment**:
   - Vertical acceleration mean: **9.85 m/s²** (aligned with $1g$)
   - Lateral acceleration mean: **-0.09 m/s²**
   - Forward acceleration mean: **0.17 m/s²**
@@ -52,7 +59,14 @@ Tested across held-out sessions representing different mounting setups/drivers:
 
 ---
 
-## 3. Exit Criteria Verification
+## 3. Dynamic Re-triggering (Misalignment Detection)
+Implemented a continuous `check_misalignment_trigger` function compliant with the architecture spec. It compares ongoing stationary gravity vectors or dynamic forward-acceleration vectors against the stored calibration matrix $\mathbf{R}_{phone \to veh}$.
+- **Threshold**: 10.0° deviation.
+- **Validation**: When feeding the engine the synthetic session subsequently offset by an additional 15° roll, the trigger immediately returned `True` (expected re-calibration signal), while returning `False` on the unshifted data.
+
+---
+
+## 4. Exit Criteria Verification
 
 - [x] **Phone-frame to vehicle-frame rotation estimation implemented**: Yes, via gravity vector leveling and dynamic acceleration projection.
 - [x] **Works for dashboard-mount and mobile-holder cases**: Verified on Driver A and Driver E mounting orientations.

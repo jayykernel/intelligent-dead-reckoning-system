@@ -108,3 +108,56 @@ class CalibrationEngine:
         gyro_veh = gyro_corrected @ self.R_phone_to_veh.T
         
         return acc_veh, gyro_veh
+
+    def check_misalignment_trigger(self, acc_window: np.ndarray, speed_window: np.ndarray, dt: float = 0.1, threshold_deg: float = 10.0) -> bool:
+        """
+        Check if the phone mount has shifted by comparing new data against the existing calibration.
+        Returns True if a recalibration should be triggered (misalignment > threshold_deg).
+        """
+        if not self.is_calibrated:
+            return True
+            
+        N = len(acc_window)
+        stationary_mask = speed_window < 0.5
+        
+        # 1. Check gravity alignment if stationary
+        if np.sum(stationary_mask) >= 10:
+            stat_acc = acc_window[stationary_mask]
+            g_phone = np.mean(stat_acc, axis=0)
+            z_v_phone = g_phone / np.linalg.norm(g_phone)
+            
+            # Existing Z vector from inverse rotation matrix (3rd row)
+            old_z_v_phone = self.R_phone_to_veh[2, :]
+            
+            cos_err = np.dot(z_v_phone, old_z_v_phone)
+            err_deg = np.degrees(np.arccos(np.clip(cos_err, -1.0, 1.0)))
+            
+            if err_deg > threshold_deg:
+                return True
+                
+        # 2. Check forward alignment if accelerating
+        ds = np.gradient(speed_window, dt)
+        accel_mask = ds > 0.5
+        if np.sum(accel_mask) >= 10:
+            stat_acc = acc_window[stationary_mask] if np.sum(stationary_mask) > 0 else np.array([0,0,9.81]) @ self.R_phone_to_veh  # hack fallback
+            if np.sum(stationary_mask) > 0:
+                g_phone = np.mean(stat_acc, axis=0)
+            
+            fwd_acc = acc_window[accel_mask] - g_phone
+            a_fwd_phone = np.mean(fwd_acc, axis=0)
+            
+            z_v_phone = g_phone / np.linalg.norm(g_phone)
+            y_v_phone = a_fwd_phone - np.dot(a_fwd_phone, z_v_phone) * z_v_phone
+            norm_y = np.linalg.norm(y_v_phone)
+            
+            if norm_y > 1e-3:
+                y_v_phone = y_v_phone / norm_y
+                old_y_v_phone = self.R_phone_to_veh[1, :]
+                
+                cos_err = np.dot(y_v_phone, old_y_v_phone)
+                err_deg = np.degrees(np.arccos(np.clip(cos_err, -1.0, 1.0)))
+                
+                if err_deg > threshold_deg:
+                    return True
+                    
+        return False
