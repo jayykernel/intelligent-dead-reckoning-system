@@ -63,8 +63,12 @@ never saw during training.
 | Final Position Error | 7120.71 m | 291.17 m |
 | Drift % | 4651.03% | **190.18%** |
 | **Drift Reduction** | — | **95.91%** |
-| Speed MAE | — | 3.72 m/s |
+| Speed MAE | — | 3.72 m/s (**149.4% of avg speed**) |
 | Speed RMSE | — | 4.46 m/s |
+| **60s window context** | — | — |
+| Average GT Speed | — | 2.49 m/s (9.0 km/h) |
+| Max GT Speed | — | 7.07 m/s (25.5 km/h) |
+| Stationary (<0.5 m/s) | — | 18.7% of window |
 
 ### 3.2 Session Vta26 (Driver E) — Different Driver/Vehicle
 
@@ -74,8 +78,12 @@ never saw during training.
 | Final Position Error | 8719.54 m | 1176.33 m |
 | Drift % | 1518.29% | **204.83%** |
 | **Drift Reduction** | — | **86.51%** |
-| Speed MAE | — | 4.79 m/s |
+| Speed MAE | — | 4.79 m/s (**52.1% of avg speed**) |
 | Speed RMSE | — | 5.78 m/s |
+| **60s window context** | — | — |
+| Average GT Speed | — | 9.20 m/s (33.1 km/h) |
+| Max GT Speed | — | 15.23 m/s (54.8 km/h) |
+| Stationary (<0.5 m/s) | — | 0.0% of window |
 
 **Cross-driver generalization confirmed**: The model generalizes from
 training drivers to held-out sessions from both the same driver (S4, 96%

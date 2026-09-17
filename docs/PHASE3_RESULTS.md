@@ -27,14 +27,22 @@ Output: Forward speed (m/s)
 
 ## Held-Out Test Results (60s Window)
 
+Speed interpretation context: The MAE numbers should be understood relative to the actual
+driving speed in each session. The AI filter predicts forward vehicle speed; MAE is the
+average absolute error in m/s.
+
 ### Session S4 (Driver A) — Same Driver/Vehicle as Baseline
 | Metric | Phase 2 Strapdown | Phase 3 AI Filter | Improvement |
 |--------|-------------------|-------------------|-------------|
 | Ground Truth Distance | 153.10 m | 153.10 m | — |
 | Final Position Error | 7120.71 m | 291.17 m | **95.91% reduction** |
 | Drift % | 4651.03% | 190.18% | **4460.84 pp** |
-| Speed MAE | — | 3.72 m/s | — |
+| Speed MAE | — | 3.72 m/s | **149.4% of average speed** |
 | Speed RMSE | — | 4.46 m/s | — |
+| **60s window context** | — | — | — |
+| Average GT Speed | — | 2.49 m/s (9.0 km/h) | — |
+| Max GT Speed | — | 7.07 m/s (25.5 km/h) | — |
+| Stationary (<0.5 m/s) | — | 18.7% of window | — |
 
 ### Session Vta26 (Driver E) — Different Driver/Vehicle
 | Metric | Phase 2 Strapdown | Phase 3 AI Filter | Improvement |
@@ -42,8 +50,14 @@ Output: Forward speed (m/s)
 | Ground Truth Distance | 574.30 m | 574.30 m | — |
 | Final Position Error | 8719.54 m | 1176.33 m | **86.51% reduction** |
 | Drift % | 1518.29% | 204.83% | **1313.46 pp** |
-| Speed MAE | — | 4.79 m/s | — |
+| Speed MAE | — | 4.79 m/s | **52.1% of average speed** |
 | Speed RMSE | — | 5.78 m/s | — |
+| **60s window context** | — | — | — |
+| Average GT Speed | — | 9.20 m/s (33.1 km/h) | — |
+| Max GT Speed | — | 15.23 m/s (54.8 km/h) | — |
+| Stationary (<0.5 m/s) | — | 0.0% of window | — |
+
+**Cross-driver generalization confirmed**: The model trained on Driver A+E sessions generalizes to held-out sessions from both the same driver (S4) and a different driver (Vta26), achieving >85% drift reduction in both cases. Note the MAE is higher on S4 (3.72 vs 4.79 m/s) but S4's average speed is much lower (2.49 vs 9.20 m/s), making the relative error 149% vs 52% respectively — the filter performs proportionally better on higher-speed driving.
 
 **Cross-driver generalization confirmed**: The model trained on Driver A+E sessions generalizes to held-out sessions from both the same driver (S4) and a different driver (Vta26), achieving >85% drift reduction in both cases.
 

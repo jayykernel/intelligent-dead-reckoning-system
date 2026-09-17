@@ -117,6 +117,8 @@ def run(
 
     # Speed metrics
     gt_speeds = synced["gt_speed"].values
+    avg_speed = float(np.mean(gt_speeds))
+    max_speed = float(np.max(gt_speeds))
     speed_mae = float(np.mean(np.abs(pred_speeds - gt_speeds)))
     speed_rmse = float(np.sqrt(np.mean((pred_speeds - gt_speeds)**2)))
 
@@ -165,6 +167,8 @@ def run(
     print(f"Drift Reduction:                 {strapdown_drift_pct - ai_drift_pct:.2f}% absolute improvement ({((strapdown_drift_pct - ai_drift_pct)/strapdown_drift_pct)*100:.2f}% reduction)")
     print(f"Speed Filter MAE:                {speed_mae:.2f} m/s")
     print(f"Speed Filter RMSE:               {speed_rmse:.2f} m/s")
+    print(f"Average GT Speed:                {avg_speed:.2f} m/s")
+    print(f"Max GT Speed:                    {max_speed:.2f} m/s")
     print(f"Comparison plot saved to:        {plot_path}")
     print("="*60 + "\n")
 
