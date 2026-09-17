@@ -31,31 +31,31 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
 #### 1. Two-Wheeler Held-Out Session 1 (`session1`)
 - **Duration**: 335.9 s (3359 samples @ 10 Hz)
 - **Ground Truth Distance**: 1645.04 m
-- **Calibration Status**: Confidence = **0.00** *(Warning: Fallback to identity transformation due to insufficient initial forward acceleration)*
+- **Calibration Status**: Confidence = **1.00** *(Successful static and dynamic alignment)*
 - **Phase 2 Baseline (Pure Strapdown INS)**:
   - Final Position Error: 271,500.67 m
   - Drift %: **16,504.16%**
 - **Phase 5 Pipeline (Classifier + Lean-Compensated NHC + ZUPT)**:
-  - Final Position Error: 1,652.23 m
-  - Drift %: **100.44%**
-  - Speed MAE: 5.47 m/s | Speed RMSE: 7.79 m/s
-  - Heading Error (Mean): **75.54°** | Heading Error (RMS): **89.95°** | Heading Error (Final): **3.12°**
-  - **Relative Drift Reduction**: **99.39% reduction** over unconstrained baseline
+  - Final Position Error: 4,694.91 m
+  - Drift %: **285.40%**
+  - Speed MAE: 14.60 m/s | Speed RMSE: 22.41 m/s
+  - Heading Error (Mean): **111.41°** | Heading Error (RMS): **120.66°** | Heading Error (Final): **126.50°**
+  - **Relative Drift Reduction**: **98.27% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/tw/session1/session1_phase5_comparison.png`
 
 #### 2. Two-Wheeler Held-Out Session 2 (`session2`)
 - **Duration**: 173.7 s (1737 samples @ 10 Hz)
 - **Ground Truth Distance**: 368.77 m
-- **Calibration Status**: Confidence = **0.00** *(Warning: Fallback to identity transformation due to insufficient initial forward acceleration)*
+- **Calibration Status**: Confidence = **1.00** *(Successful static and dynamic alignment)*
 - **Phase 2 Baseline (Pure Strapdown INS)**:
   - Final Position Error: 43,938.01 m
   - Drift %: **11,914.59%**
 - **Phase 5 Pipeline (Classifier + Lean-Compensated NHC + ZUPT)**:
-  - Final Position Error: 517.68 m
-  - Drift %: **140.38%**
-  - Speed MAE: 4.89 m/s | Speed RMSE: 8.81 m/s
-  - Heading Error (Mean): **90.19°** | Heading Error (RMS): **101.75°** | Heading Error (Final): **120.80°**
-  - **Relative Drift Reduction**: **98.82% reduction** over unconstrained baseline
+  - Final Position Error: 783.47 m
+  - Drift %: **212.45%**
+  - Speed MAE: 7.72 m/s | Speed RMSE: 12.93 m/s
+  - Heading Error (Mean): **97.12°** | Heading Error (RMS): **108.51°** | Heading Error (Final): **79.44°**
+  - **Relative Drift Reduction**: **98.22% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/tw/session2/session2_phase5_comparison.png`
 
 ---
@@ -70,26 +70,26 @@ All evaluations were executed with the full Phase 5 pipeline (`engine/run_phase5
   - Final Position Error: 218,417.95 m
   - Drift %: **8,376.09%**
 - **Phase 5 Pipeline (Classifier + Standard NHC + ZUPT)**:
-  - Final Position Error: 2,313.59 m
-  - Drift %: **88.72%**
-  - Speed MAE: 6.83 m/s | Speed RMSE: 8.33 m/s
-  - Heading Error (Mean): **79.41°** | Heading Error (RMS): **94.54°** | Heading Error (Final): **126.40°**
-  - **Relative Drift Reduction**: **98.94% reduction** over unconstrained baseline
+  - Final Position Error: 2,060.00 m
+  - Drift %: **79.00%**
+  - Speed MAE: 6.84 m/s | Speed RMSE: 8.18 m/s
+  - Heading Error (Mean): **73.04°** | Heading Error (RMS): **93.40°** | Heading Error (Final): **40.74°**
+  - **Relative Drift Reduction**: **99.02% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/car/S4/S4_phase5_comparison.png`
 
 #### 2. Car Held-Out Session Vta26 (Driver E)
 - **Duration**: 193.4 s (1934 samples @ 10 Hz)
 - **Ground Truth Distance**: 1049.34 m
-- **Calibration Status**: Confidence = **0.00** *(Warning: Fallback to identity transformation due to insufficient stationary period)*
+- **Calibration Status**: Confidence = **1.00** *(Successful static and dynamic alignment)*
 - **Phase 2 Baseline (Pure Strapdown INS)**:
   - Final Position Error: 61,100.31 m
   - Drift %: **5,822.76%**
 - **Phase 5 Pipeline (Classifier + Standard NHC + ZUPT)**:
-  - Final Position Error: 2,111.58 m
-  - Drift %: **201.23%**
-  - Speed MAE: 6.19 m/s | Speed RMSE: 11.91 m/s
-  - Heading Error (Mean): **89.16°** | Heading Error (RMS): **111.31°** | Heading Error (Final): **144.02°**
-  - **Relative Drift Reduction**: **96.54% reduction** over unconstrained baseline
+  - Final Position Error: 985.05 m
+  - Drift %: **93.87%**
+  - Speed MAE: 7.16 m/s | Speed RMSE: 13.52 m/s
+  - Heading Error (Mean): **78.09°** | Heading Error (RMS): **81.40°** | Heading Error (Final): **83.27°**
+  - **Relative Drift Reduction**: **98.37% reduction** over unconstrained baseline
   - *Plot*: `data/processed/phase5_eval/car/Vta26/Vta26_phase5_comparison.png`
 
 ---

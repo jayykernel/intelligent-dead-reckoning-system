@@ -33,7 +33,7 @@ def run_evaluation(
     model_class_path: str = "training/models/vehicle_classifier.tflite",
     raw_root: str = "data/raw",
     window_sec: float = None,  # None = full session
-    calib_window_sec: float = 60.0,  # calibration window
+    calib_window_sec: float = 120.0,  # calibration window (120s covers sessions starting mid-motion)
 ):
     """
     Run the Phase 5 pipeline and return drift metrics.
@@ -64,7 +64,9 @@ def run_evaluation(
         calib_N = N  # fallback
     acc_calib = acc[:calib_N]
     gyro_calib = gyro[:calib_N]
-    speed_calib = synced["gt_speed"].iloc[:calib_N].values if data_type == "car" else np.zeros(calib_N)  # two-wheeler speed not used in calib
+    speed_calib = synced["gt_speed"].iloc[:calib_N].values
+    if np.any(np.isnan(speed_calib)):
+        speed_calib = np.nan_to_num(speed_calib, nan=0.0)
 
     calib = CalibrationEngine()
     calib_success = calib.calibrate_from_session(acc_calib, gyro_calib, speed_calib, dt=dt)
@@ -388,7 +390,7 @@ def main():
     parser.add_argument("--speed-model", default="training/models/speed_filter.tflite")
     parser.add_argument("--class-model", default="training/models/vehicle_classifier.tflite")
     parser.add_argument("--window", type=float, default=None)
-    parser.add_argument("--calib-window", type=float, default=60.0)
+    parser.add_argument("--calib-window", type=float, default=120.0)
     args = parser.parse_args()
 
     run_evaluation(
