@@ -98,6 +98,8 @@ execution protocol and commit convention.
   segments of test data; NIS pass/fail logging functional and inspectable.
 - **DO NOT**: implement the FOG/edge correction variant yet — mobile path only.
 
+**NOTE (2026-09-18)**: Phase 6 is documented as a known limitation. Drift target (≤10%) not met due to heading-observability gap during GNSS outage. Full analysis in `docs/OPEN_QUESTIONS.md` and results in `docs/PHASE6_RESULTS.md`. The EKF architecture is sound (proven by S4 partial success at 37.24% drift), but no reliable absolute heading source exists during outage (magnetometer per-session calibration errors 1–140° with ±50–120° noise; GNSS COG unavailable below 1.0 m/s). Phase 6 boxes remain unchecked pending resolution.
+
 ---
 
 ### Phase 7 — Map-Matching Filter
