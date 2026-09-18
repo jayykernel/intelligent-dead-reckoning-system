@@ -20,6 +20,7 @@ from typing import Dict, Tuple, Optional, List
 from engine.fusion.ekf import ErrorStateEKF
 from engine.fusion.mag_gate import MagnetometerGate
 from engine.fusion.ai_corrector import AICorrectionModule
+from engine.outage_prediction.outage_predictor import OutagePredictor
 from engine.ai_filters.vehicle_classifier import VehicleClassifier
 from engine.nhc_zupt.lean_ekf import LeanAngleEKF
 from engine.nhc_zupt.constrained_ins import ConstrainedINS
@@ -33,7 +34,8 @@ class GNSSINSFusionEngine:
         dt: float = 0.1,
         speed_model_path: str = "training/models/speed_filter.tflite",
         class_model_path: str = "training/models/vehicle_classifier.tflite",
-        enable_ai: bool = True
+        enable_ai: bool = True,
+        default_vehicle_type: str = "car"
     ):
         self.dt = dt
         self.enable_ai = enable_ai
@@ -52,7 +54,7 @@ class GNSSINSFusionEngine:
 
         # Phase 5 Modules
         self.classifier: Optional[VehicleClassifier] = None
-        if os.path.exists(class_model_path):
+        if os.path.exists(class_model_path) and self.enable_ai:
             try:
                 self.classifier = VehicleClassifier(model_path=class_model_path)
             except Exception as e:
@@ -68,9 +70,10 @@ class GNSSINSFusionEngine:
             model_path=speed_model_path,
             enable_tflite=enable_ai
         )
+        self.outage_predictor = OutagePredictor()
 
         # Buffers & States
-        self.current_vehicle_type = "car"
+        self.current_vehicle_type = default_vehicle_type
         self.current_lean_angle_rad = 0.0
         self.classifier_buffer: List[np.ndarray] = []
         self.classifier_window_size = 20
@@ -163,7 +166,10 @@ class GNSSINSFusionEngine:
         gnss_pos_enu: Optional[np.ndarray] = None,
         gnss_vel_enu: Optional[np.ndarray] = None,
         is_gnss_available: bool = True,
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        gnss_acc_m: Optional[float] = None,
+        gnss_sat_count: Optional[int] = None,
+        gnss_avg_cn0: Optional[float] = None
     ) -> Dict:
         """
         Execute one fusion step at dt (10 Hz).
@@ -219,81 +225,103 @@ class GNSSINSFusionEngine:
         else:
             self.current_lean_angle_rad = 0.0
 
-        # 6. Apply Non-Holonomic Constraints (NHC) & ZUPT during GNSS Outage
-        # If GNSS is denied, physical constraints (NHC, ZUPT, AI Speed) maintain stability
-        if not is_gnss_available:
-            # Constrain velocity vector using Phase 5 physical model
-            v_veh_constrained = self.constrained_ins.constrain(
-                acc_veh=acc_veh,
-                gyro_veh=gyro_veh,
-                v_veh=v_veh,
-                vehicle_type=self.current_vehicle_type,
-                lean_angle_rad=self.current_lean_angle_rad
+        # 6. Apply Continuous Non-Holonomic Constraints (NHC) & ZUPT via EKF Measurement Updates
+        # Active continuously as an aiding source regardless of GNSS availability
+        is_stopped = self.constrained_ins._is_stopped(acc_veh, gyro_veh, v_veh)
+        if is_stopped:
+            # Stationary vehicle: 3D zero velocity update
+            self.ekf.update_zupt(
+                sigma_zupt=0.05,
+                alpha=0.01,
+                timestamp=timestamp
             )
-            # Apply constrained velocity back to EKF nominal state
-            self.ekf.v = R_veh_to_nav @ v_veh_constrained
+        else:
+            # Moving vehicle: continuous NHC (lateral and vertical constraints, lean-compensated for two-wheelers)
+            self.ekf.update_nhc(
+                vehicle_type=self.current_vehicle_type,
+                lean_angle_rad=self.current_lean_angle_rad,
+                sigma_nhc_x=0.2,
+                sigma_nhc_z=0.2,
+                alpha=0.01,
+                timestamp=timestamp
+            )
 
-            # Apply AI Forward Speed update if available
-            if ai_speed is not None:
-                self.ekf.update_ai_forward_speed(
-                    speed_fwd=ai_speed,
-                    sigma_speed=sigma_ai,
-                    alpha=0.01,
-                    timestamp=timestamp
-                )
+        # Apply AI Forward Speed update during GNSS outages if available
+        if not is_gnss_available and ai_speed is not None:
+            self.ekf.update_ai_forward_speed(
+                speed_fwd=ai_speed,
+                sigma_speed=sigma_ai,
+                alpha=0.01,
+                timestamp=timestamp
+            )
 
         # 7. Magnetometer Disturbance Gating (N5)
-        mag_used = False
-        if mag_raw is not None:
-            # Rotate mag to vehicle frame
-            mag_veh = mag_raw @ self.calib.R_phone_to_veh.T
-            is_clean, mag_yaw, mag_info = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
-            if is_clean and mag_yaw is not None:
-                # Apply 1-DOF NIS gated heading update whenever magnetometer is clean
-                passed, _, _ = self.ekf.update_heading(
-                    heading_rad=mag_yaw,
-                    sigma_heading=np.radians(8.0),
-                    alpha=0.01,
-                    timestamp=timestamp,
-                    source="MAG_HEADING"
-                )
-                mag_used = passed
+        # Skip magnetometer heading updates entirely - disable N5
+        # mag_used = False
+        # if mag_raw is not None:
+        #     # Rotate mag to vehicle frame
+        #     mag_veh = mag_raw @ self.calib.R_phone_to_veh.T
+        #     is_clean, mag_yaw, mag_info = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
+        #     if is_clean and mag_yaw is not None:
+        #         # Apply 1-DOF NIS gated heading update whenever magnetometer is clean
+        #         passed, _, _ = self.ekf.update_heading(
+        #             heading_rad=mag_yaw,
+        #             sigma_heading=np.radians(8.0),
+        #             alpha=0.01,
+        #             timestamp=timestamp,
+        #             source="MAG_HEADING"
+        #         )
+        #         mag_used = passed
 
-        # 8. GNSS Fix Updates with Chi-squared NIS Gating (N3)
+        # 8. GNSS Fix Updates with Predictive Trust Scaling & NIS Gating
         gnss_pos_passed = False
         gnss_vel_passed = False
+
+        # Calculate early trust signal using raw GNSS measurements
+        trust_score = self.outage_predictor.update(
+            avg_cn0=gnss_avg_cn0,
+            sat_count=gnss_sat_count,
+            accuracy_m=gnss_acc_m
+        )
+
         if is_gnss_available and gnss_pos_enu is not None:
+            # Dynamically scale the measurement uncertainty based on trust
+            # lower trust -> higher uncertainty -> less weight on GNSS
+            dynamic_sigma_pos = 5.0 / max(0.1, np.sqrt(trust_score))
+
             gnss_pos_passed, _, _ = self.ekf.update_gnss_position(
                 p_gnss_enu=gnss_pos_enu,
-                sigma_pos=5.0,
+                sigma_pos=dynamic_sigma_pos,
                 alpha=0.01,
                 timestamp=timestamp
             )
             if gnss_vel_enu is not None:
+                # Also scale velocity uncertainty slightly
+                dynamic_sigma_vel = 0.5 / max(0.2, trust_score)
                 gnss_vel_passed, _, _ = self.ekf.update_gnss_velocity(
                     v_gnss_enu=gnss_vel_enu,
-                    sigma_vel=0.5,
+                    sigma_vel=dynamic_sigma_vel,
                     alpha=0.01,
                     timestamp=timestamp
                 )
                 # GNSS Course-Over-Ground (COG) provides absolute heading
                 speed_2d = np.linalg.norm(gnss_vel_enu[:2])
-                # Apply COG heading update with adaptive uncertainty
-                # COG becomes unreliable at low speeds, so increase sigma_heading accordingly
-                # sigma_heading scales from 3° at 1.5 m/s to 10° at 0.3 m/s
-                if speed_2d >= 1.5:
-                    sigma_heading = np.radians(3.0)  # Tight heading estimate at higher speeds
-                else:
-                    sigma_heading = np.radians(3.0 + 7.0 * (1.5 - speed_2d) / 1.2)  # Looser at low speeds
 
-                cog_heading = float(np.arctan2(gnss_vel_enu[0], gnss_vel_enu[1]))
-                self.ekf.update_heading(
-                    heading_rad=cog_heading,
-                    sigma_heading=sigma_heading,
-                    alpha=0.01,
-                    timestamp=timestamp,
-                    source="GNSS_HEADING"
-                )
+                # Minimum speed gate for COG heading: skip completely if below 1.0 m/s
+                if speed_2d >= 1.0:
+                    if speed_2d >= 1.5:
+                        sigma_heading = np.radians(3.0)  # Tight heading estimate at higher speeds
+                    else:
+                        sigma_heading = np.radians(3.0 + 7.0 * (1.5 - speed_2d) / 0.5)  # Looser at low speeds
+
+                    cog_heading = float(np.arctan2(gnss_vel_enu[0], gnss_vel_enu[1]))
+                    self.ekf.update_heading(
+                        heading_rad=cog_heading,
+                        sigma_heading=sigma_heading,
+                        alpha=0.01,
+                        timestamp=timestamp,
+                        source="GNSS_HEADING"
+                    )
 
         # Record histories
         mode = "GNSS_AIDED" if is_gnss_available else "PURE_DEAD_RECKONING"
@@ -313,5 +341,6 @@ class GNSSINSFusionEngine:
             "lean_angle_deg": float(np.degrees(self.current_lean_angle_rad)),
             "mag_disturbed": self.mag_gate.is_disturbed,
             "gnss_pos_passed": gnss_pos_passed,
-            "gnss_vel_passed": gnss_vel_passed
+            "gnss_vel_passed": gnss_vel_passed,
+            "trust_score": float(trust_score)
         }

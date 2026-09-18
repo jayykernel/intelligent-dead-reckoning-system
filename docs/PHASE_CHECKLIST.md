@@ -112,8 +112,8 @@ execution protocol and commit convention.
 ---
 
 ### Phase 8 — Predictive Outage Detection
-- [ ] Android raw GNSS measurements integration (C/N0, HDOP)
-- [ ] Trend detection + early trust-signal emission to fusion engine
+- [x] Android raw GNSS measurements integration (C/N0, HDOP)
+- [x] Trend detection + early trust-signal emission to fusion engine
 - **Exit criteria**: on a test drive/log with a known upcoming outage
   (tunnel/underpass), trust signal visibly shifts before the hard GNSS loss
   timestamp.
