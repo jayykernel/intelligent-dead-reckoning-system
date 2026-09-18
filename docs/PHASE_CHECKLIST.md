@@ -103,9 +103,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 7 — Map-Matching Filter
-- [ ] OSM offline extract integrated
-- [ ] HMM-based map matching implemented
-- [ ] Two-wheeler relaxed-tolerance + no-snap-fallback profile implemented
+- [x] OSM offline extract integrated
+- [x] HMM-based map matching implemented
+- [x] Two-wheeler relaxed-tolerance + no-snap-fallback profile implemented
 - **Exit criteria**: matched trajectory visibly snaps to correct road on test
   routes; no-snap fallback demonstrably triggers on a deliberately bad input.
 

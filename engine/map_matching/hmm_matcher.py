@@ -1,0 +1,258 @@
+"""
+engine/map_matching/hmm_matcher.py
+
+HMM-based Map-Matching Filter (Newson & Krumm Viterbi formulation).
+Supports:
+- Standard Car Profile (strict tolerances, heading gating)
+- Two-Wheeler Profile (relaxed tolerances for weaving/lane-filtering)
+- Explicit No-Snap Fallback mechanism on low-confidence or off-road segments.
+"""
+
+import numpy as np
+from typing import List, Dict, Tuple, Optional
+from engine.map_matching.road_network import RoadNetwork, RoadSegment
+
+
+class MapMatchingResult:
+    def __init__(
+        self,
+        raw_pos_enu: np.ndarray,
+        snapped_pos_enu: np.ndarray,
+        snapped: bool,
+        confidence: float,
+        matched_segment_id: Optional[int] = None,
+        osm_way_id: Optional[int] = None,
+        cross_track_error_m: float = 0.0,
+        fallback_reason: Optional[str] = None
+    ):
+        self.raw_pos = raw_pos_enu
+        self.snapped_pos = snapped_pos_enu
+        self.snapped = snapped
+        self.confidence = confidence
+        self.matched_segment_id = matched_segment_id
+        self.osm_way_id = osm_way_id
+        self.cross_track_error_m = cross_track_error_m
+        self.fallback_reason = fallback_reason
+
+
+class HMMMapMatcher:
+    def __init__(
+        self,
+        road_network: RoadNetwork,
+        vehicle_type: str = "car"
+    ):
+        self.road_network = road_network
+        self.vehicle_type = vehicle_type
+        self._configure_profile(vehicle_type)
+
+        # Online sliding window state
+        self.history_states: List[Dict] = []
+        self.last_pos_enu: Optional[np.ndarray] = None
+        self.last_matched_seg: Optional[RoadSegment] = None
+
+    def _configure_profile(self, vehicle_type: str):
+        """Configure HMM parameters based on vehicle profile."""
+        if vehicle_type == "two_wheeler":
+            # Two-Wheeler Profile: relaxed tolerances, higher agility, lane filtering
+            self.search_radius = 45.0          # Wider search radius (m)
+            self.sigma_z = 10.0                # Relaxed emission standard deviation (m)
+            self.beta = 8.0                    # Transition scale parameter (m)
+            self.heading_weight = 0.5          # Relaxed heading penalty
+            self.max_deviation_m = 50.0        # Max allowed cross-track distance before no-snap
+            self.min_confidence = 1e-4         # Minimum allowed emission confidence
+        else:
+            # Car / Default Profile: standard road tracking
+            self.search_radius = 25.0          # Standard search radius (m)
+            self.sigma_z = 5.0                 # Standard emission std dev (m)
+            self.beta = 5.0                    # Standard transition scale (m)
+            self.heading_weight = 2.0          # Strict heading alignment
+            self.max_deviation_m = 25.0        # Strict cross-track threshold
+            self.min_confidence = 1e-3         # Minimum confidence
+
+    def set_vehicle_type(self, vehicle_type: str):
+        """Dynamically switch profile (e.g. from VehicleClassifier output)."""
+        self.vehicle_type = vehicle_type
+        self._configure_profile(vehicle_type)
+
+    def _emission_prob(
+        self,
+        dist_m: float,
+        heading_deg: Optional[float],
+        seg: RoadSegment
+    ) -> float:
+        """
+        Compute emission probability P(z_t | c_i).
+        Gaussian distance probability + heading alignment term.
+        """
+        # 1. Distance likelihood: Gaussian N(0, sigma_z^2)
+        p_dist = (1.0 / (np.sqrt(2.0 * np.pi) * self.sigma_z)) * np.exp(-0.5 * (dist_m / self.sigma_z)**2)
+
+        # 2. Heading alignment likelihood
+        if heading_deg is not None and seg.length > 1.0:
+            angle_diff = abs((heading_deg - seg.bearing_deg + 180.0) % 360.0 - 180.0)
+            if not seg.oneway:
+                # Can travel in reverse bearing
+                rev_diff = abs((heading_deg - (seg.bearing_deg + 180.0) + 180.0) % 360.0 - 180.0)
+                angle_diff = min(angle_diff, rev_diff)
+
+            # Soft penalty for heading mismatch
+            p_heading = np.exp(-0.5 * (np.radians(angle_diff) * self.heading_weight)**2)
+        else:
+            p_heading = 1.0
+
+        return float(p_dist * p_heading)
+
+    def _transition_prob(
+        self,
+        prev_proj: np.ndarray,
+        curr_proj: np.ndarray,
+        prev_raw: np.ndarray,
+        curr_raw: np.ndarray
+    ) -> float:
+        """
+        Compute transition probability P(c_{t, j} | c_{t-1, i}).
+        Exponential distribution on |d_route - d_euclidean|.
+        """
+        d_route = np.linalg.norm(curr_proj - prev_proj)
+        d_raw = np.linalg.norm(curr_raw - prev_raw)
+        delta_d = abs(d_route - d_raw)
+
+        return float((1.0 / self.beta) * np.exp(-delta_d / self.beta))
+
+    def match_point(
+        self,
+        raw_pos_enu: np.ndarray,
+        heading_deg: Optional[float] = None
+    ) -> MapMatchingResult:
+        """
+        Online HMM map matching step for a single position measurement.
+        """
+        pt = raw_pos_enu[:2]
+        candidates = self.road_network.find_candidate_segments(
+            point_enu=raw_pos_enu,
+            radius_m=self.search_radius,
+            max_candidates=8
+        )
+
+        # 1. No-Snap Fallback Check: No candidates in range
+        if len(candidates) == 0:
+            return MapMatchingResult(
+                raw_pos_enu=raw_pos_enu,
+                snapped_pos_enu=raw_pos_enu,
+                snapped=False,
+                confidence=0.0,
+                fallback_reason="NO_CANDIDATE_ROAD_IN_RADIUS"
+            )
+
+        # 2. Compute emissions for all candidates
+        current_candidates = []
+        for seg, proj, dist in candidates:
+            # Check maximum deviation
+            if dist > self.max_deviation_m:
+                continue
+
+            emit_p = self._emission_prob(dist, heading_deg, seg)
+            if emit_p >= self.min_confidence:
+                current_candidates.append({
+                    "seg": seg,
+                    "proj": proj,
+                    "dist": dist,
+                    "emit_p": emit_p
+                })
+
+        # 3. No-Snap Fallback Check: Low emission confidence across all candidates
+        if len(current_candidates) == 0:
+            return MapMatchingResult(
+                raw_pos_enu=raw_pos_enu,
+                snapped_pos_enu=raw_pos_enu,
+                snapped=False,
+                confidence=0.0,
+                fallback_reason="LOW_EMISSION_CONFIDENCE"
+            )
+
+        # 4. First point in trajectory (Initialization)
+        if len(self.history_states) == 0:
+            best_cand = max(current_candidates, key=lambda c: c["emit_p"])
+            self.history_states.append({"candidates": current_candidates, "viterbi": {id(c): np.log(max(1e-12, c["emit_p"])) for c in current_candidates}, "raw": pt})
+            self.last_pos_enu = raw_pos_enu
+            self.last_matched_seg = best_cand["seg"]
+
+            snapped_3d = np.array([best_cand["proj"][0], best_cand["proj"][1], raw_pos_enu[2] if len(raw_pos_enu) > 2 else 0.0])
+            return MapMatchingResult(
+                raw_pos_enu=raw_pos_enu,
+                snapped_pos_enu=snapped_3d,
+                snapped=True,
+                confidence=float(best_cand["emit_p"]),
+                matched_segment_id=best_cand["seg"].segment_id,
+                osm_way_id=best_cand["seg"].osm_way_id,
+                cross_track_error_m=best_cand["dist"]
+            )
+
+        # 5. Transition & Viterbi Update
+        prev_step = self.history_states[-1]
+        prev_cands = prev_step["candidates"]
+        prev_viterbi = prev_step["viterbi"]
+        prev_raw = prev_step["raw"]
+
+        curr_viterbi = {}
+        backpointers = {}
+
+        for c_curr in current_candidates:
+            c_curr_id = id(c_curr)
+            max_log_prob = -np.inf
+            best_prev = None
+
+            for c_prev in prev_cands:
+                c_prev_id = id(c_prev)
+                trans_p = self._transition_prob(c_prev["proj"], c_curr["proj"], prev_raw, pt)
+                log_p = prev_viterbi.get(c_prev_id, -1e6) + np.log(max(1e-12, trans_p)) + np.log(max(1e-12, c_curr["emit_p"]))
+
+                if log_p > max_log_prob:
+                    max_log_prob = log_p
+                    best_prev = c_prev
+
+            curr_viterbi[c_curr_id] = max_log_prob
+            backpointers[c_curr_id] = best_prev
+
+        # Best candidate for current step
+        best_cand_id = max(curr_viterbi.keys(), key=lambda k: curr_viterbi[k])
+        best_cand = next(c for c in current_candidates if id(c) == best_cand_id)
+
+        # Save history
+        self.history_states.append({
+            "candidates": current_candidates,
+            "viterbi": curr_viterbi,
+            "raw": pt
+        })
+        if len(self.history_states) > 50:
+            self.history_states.pop(0)
+
+        self.last_pos_enu = raw_pos_enu
+        self.last_matched_seg = best_cand["seg"]
+
+        snapped_3d = np.array([best_cand["proj"][0], best_cand["proj"][1], raw_pos_enu[2] if len(raw_pos_enu) > 2 else 0.0])
+        return MapMatchingResult(
+            raw_pos_enu=raw_pos_enu,
+            snapped_pos_enu=snapped_3d,
+            snapped=True,
+            confidence=float(best_cand["emit_p"]),
+            matched_segment_id=best_cand["seg"].segment_id,
+            osm_way_id=best_cand["seg"].osm_way_id,
+            cross_track_error_m=best_cand["dist"]
+        )
+
+    def match_trajectory(
+        self,
+        positions_enu: np.ndarray,
+        headings_deg: Optional[np.ndarray] = None
+    ) -> List[MapMatchingResult]:
+        """
+        Run batch map-matching over an entire trajectory.
+        """
+        self.history_states = []
+        results = []
+        for i in range(len(positions_enu)):
+            h = headings_deg[i] if headings_deg is not None else None
+            res = self.match_point(positions_enu[i], heading_deg=h)
+            results.append(res)
+        return results
