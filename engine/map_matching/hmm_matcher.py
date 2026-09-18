@@ -104,6 +104,8 @@ class HMMMapMatcher:
 
     def _transition_prob(
         self,
+        prev_seg: RoadSegment,
+        curr_seg: RoadSegment,
         prev_proj: np.ndarray,
         curr_proj: np.ndarray,
         prev_raw: np.ndarray,
@@ -113,7 +115,30 @@ class HMMMapMatcher:
         Compute transition probability P(c_{t, j} | c_{t-1, i}).
         Exponential distribution on |d_route - d_euclidean|.
         """
-        d_route = np.linalg.norm(curr_proj - prev_proj)
+        # Simplistic topological penalty for jumping between unconnected segments
+        # If segments aren't identical and don't share nodes, heavily penalize spatial jumps
+        same_seg = (prev_seg.segment_id == curr_seg.segment_id)
+
+        # We don't have full Dijkstra routing built in, so approximate topological distance:
+        d_route_euclidean = np.linalg.norm(curr_proj - prev_proj)
+
+        # If jumping to a completely different road segment that isn't connected,
+        # the real route distance would be much larger than the euclidean projection distance.
+        if not same_seg:
+            # Check if they share end points (simple graph adjacency)
+            connected = (np.linalg.norm(prev_seg.p_start - curr_seg.p_start) < 2.0 or
+                         np.linalg.norm(prev_seg.p_end - curr_seg.p_start) < 2.0 or
+                         np.linalg.norm(prev_seg.p_start - curr_seg.p_end) < 2.0 or
+                         np.linalg.norm(prev_seg.p_end - curr_seg.p_end) < 2.0)
+            if not connected:
+                # Add a massive "jump penalty" (simulate having to drive around the block)
+                # Typically, topological distance >> euclidean distance if jumping.
+                d_route = d_route_euclidean + 200.0
+            else:
+                d_route = d_route_euclidean
+        else:
+            d_route = d_route_euclidean
+
         d_raw = np.linalg.norm(curr_raw - prev_raw)
         delta_d = abs(d_route - d_raw)
 
@@ -204,7 +229,7 @@ class HMMMapMatcher:
 
             for c_prev in prev_cands:
                 c_prev_id = id(c_prev)
-                trans_p = self._transition_prob(c_prev["proj"], c_curr["proj"], prev_raw, pt)
+                trans_p = self._transition_prob(c_prev["seg"], c_curr["seg"], c_prev["proj"], c_curr["proj"], prev_raw, pt)
                 log_p = prev_viterbi.get(c_prev_id, -1e6) + np.log(max(1e-12, trans_p)) + np.log(max(1e-12, c_curr["emit_p"]))
 
                 if log_p > max_log_prob:
@@ -217,6 +242,17 @@ class HMMMapMatcher:
         # Best candidate for current step
         best_cand_id = max(curr_viterbi.keys(), key=lambda k: curr_viterbi[k])
         best_cand = next(c for c in current_candidates if id(c) == best_cand_id)
+
+        # Check if the best path's confidence has completely degraded
+        # (e.g. cumulative routing/topological jumps indicate off-road tracking)
+        if curr_viterbi[best_cand_id] < -40.0:  # Threshold for topological discontinuity
+            return MapMatchingResult(
+                raw_pos_enu=raw_pos_enu,
+                snapped_pos_enu=raw_pos_enu,
+                snapped=False,
+                confidence=0.0,
+                fallback_reason="TOPOLOGICAL_DISCONTINUITY"
+            )
 
         # Save history
         self.history_states.append({
