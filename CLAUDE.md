@@ -93,6 +93,8 @@ hasn't been reached yet.
 /screening_package         the screening-round deliverable (model + plots + writeup)
 ```
 
+**New Rule**: No script, test, or debug file may ever be created at the repository root. Debug and ad-hoc investigation scripts belong in the relevant module's `tests/` subfolder (e.g. `engine/fusion/tests/`, `engine/calibration/tests/`) — create that subfolder if it doesn't exist yet, matching the module the code under investigation belongs to. This applies for the rest of the project, all remaining phases, no exceptions.
+
 Do not create alternate top-level folders. Do not restructure this layout
 mid-project even if it seems cleaner — raise it in `docs/OPEN_QUESTIONS.md` first.
 
