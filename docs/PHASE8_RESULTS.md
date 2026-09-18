@@ -24,6 +24,14 @@
    - **Hard Blackout Onset ($t = 1961.0\text{s}$ to $1963.0\text{s}$)**: Tracked satellites collapse to **2, 2, and 3 satellites** across a 3-second continuous outage window (complete loss of GNSS fix).
    - **Actual Predictive Lead-Time**: **2.0 seconds** ahead of complete fix loss.
 
+### Practical Significance & Sample Size Context
+- **Practical Significance of 2.0s Lead Time**:
+  - **Distance Traveled**: At typical urban driving speeds of 40–50 km/h (11.1–13.8 m/s), a 2.0-second warning covers **22 to 28 meters** of road travel. This corresponds directly to the physical entrance/shadow zone preceding a tunnel portal or multi-lane overpass.
+  - **Fusion Smoothing**: Because the mobile EKF updates at 10 Hz, 2.0 seconds provides **20 discrete filter prediction/update cycles**. This is more than sufficient time to ramp the GNSS measurement covariance smoothly from $R = (5.0\text{ m})^2 \to (50.0\text{ m})^2$, effectively decoupling the filter state from degraded GNSS measurements before the hard fix drop occurs, eliminating state jumps.
+- **Sample Size Context**:
+  - An exhaustive scan across the entire 2019-epoch (33.6-minute) dataset identified **exactly two discrete blackout events** (where tracked satellites fell to $\le 3$). 
+  - The measured 2.0-second lead time across both events is preliminary and should be viewed as an indicative figure for this detection window configuration ($\text{window} = 4.0\text{s}$ at $1\text{ Hz}$), rather than an exhaustive multi-session benchmark.
+
 ---
 
 ## 2. End-to-End Fusion Integration & Adaptive $R$ Scaling
