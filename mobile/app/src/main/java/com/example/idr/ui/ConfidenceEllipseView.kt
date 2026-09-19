@@ -9,8 +9,6 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * Custom Canvas View for rendering the 2D Real-Time Confidence Ellipse (N4).
@@ -30,28 +28,19 @@ class ConfidenceEllipseView @JvmOverloads constructor(
     private var ellipse: ConfidenceEllipse = ConfidenceEllipse(semiMajorAxisM = 2.0f, semiMinorAxisM = 1.5f, orientationDeg = 0.0f)
     private var mode: String = "GNSS_AIDED"
     private var trustScore: Float = 1.0f
-    private var headingDeg: Float = 0.0f // Heading clockwise from North
+    private var headingDeg: Float = 0.0f
+    private var nisPassed: Boolean = true
 
     // Pixels per meter scale (e.g., 10 pixels = 1 meter for close inspection)
     private var pixelsPerMeter: Float = 8.0f
 
     // Drawing Paints
-    private val ellipseFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = Color.argb(45, 0, 180, 80) // Translucent green by default
-    }
-
-    private val ellipseStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 3.5f
-        color = Color.rgb(0, 180, 80)
-    }
-
+    private val ellipseFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val ellipseStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3.5f }
     private val oneSigmaStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2.0f
         pathEffect = DashPathEffect(floatArrayOf(10f, 10f), 0f)
-        color = Color.argb(120, 0, 180, 80)
     }
 
     private val vehiclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -88,34 +77,39 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         pEN: Double,
         currentMode: String,
         trust: Float,
-        heading: Float
+        heading: Float,
+        nisPassed: Boolean
     ) {
         this.ellipse = ConfidenceEllipse.fromCovariance(pEE, pNN, pEN)
         this.mode = currentMode
         this.trustScore = trust
         this.headingDeg = heading
+        this.nisPassed = nisPassed
 
-        // Dynamically adjust colors based on operational mode and trust
-        when (currentMode) {
-            "GNSS_AIDED" -> {
-                if (trust < 0.6f) {
-                    // Pre-outage warning
-                    ellipseFillPaint.color = Color.argb(45, 255, 165, 0) // Amber
-                    ellipseStrokePaint.color = Color.rgb(255, 140, 0)
-                    oneSigmaStrokePaint.color = Color.argb(120, 255, 140, 0)
-                } else {
-                    // Healthy GNSS
-                    ellipseFillPaint.color = Color.argb(45, 46, 125, 50) // Green
-                    ellipseStrokePaint.color = Color.rgb(46, 125, 50)
-                    oneSigmaStrokePaint.color = Color.argb(120, 46, 125, 50)
-                }
+        // Use Phase 8/9 thresholds exactly: <0.2 drop, >0.8 recover.
+        // Amber bridges the gap during transition logic. Purple forces rejected rendering.
+        if (!nisPassed && currentMode == "GNSS_AIDED") {
+            // NIS Rejected (Purple)
+            ellipseFillPaint.color = Color.argb(45, 128, 0, 128)
+            ellipseStrokePaint.color = Color.rgb(128, 0, 128)
+            oneSigmaStrokePaint.color = Color.argb(120, 128, 0, 128)
+        } else if (currentMode == "GNSS_AIDED") {
+            if (trust < 0.8f) {
+                // Amber (Trust dropping toward 0.2, or recovering but hasn't breached 0.8 yet)
+                ellipseFillPaint.color = Color.argb(45, 255, 165, 0)
+                ellipseStrokePaint.color = Color.rgb(255, 140, 0)
+                oneSigmaStrokePaint.color = Color.argb(120, 255, 140, 0)
+            } else {
+                // Green (Trust > 0.8, normal operation)
+                ellipseFillPaint.color = Color.argb(45, 46, 125, 50)
+                ellipseStrokePaint.color = Color.rgb(46, 125, 50)
+                oneSigmaStrokePaint.color = Color.argb(120, 46, 125, 50)
             }
-            "PURE_DEAD_RECKONING" -> {
-                // Pure dead reckoning (expanding uncertainty)
-                ellipseFillPaint.color = Color.argb(55, 198, 40, 40) // Red
-                ellipseStrokePaint.color = Color.rgb(198, 40, 40)
-                oneSigmaStrokePaint.color = Color.argb(130, 198, 40, 40)
-            }
+        } else {
+            // PURE_DEAD_RECKONING (Red)
+            ellipseFillPaint.color = Color.argb(55, 198, 40, 40)
+            ellipseStrokePaint.color = Color.rgb(198, 40, 40)
+            oneSigmaStrokePaint.color = Color.argb(130, 198, 40, 40)
         }
 
         // Auto-scale pixels per meter so the ellipse always fits nicely on screen
@@ -132,7 +126,7 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         val cx = width / 2.0f
         val cy = height / 2.0f
 
-        // 1. Draw concentric distance reference rings (5m, 10m, 20m, 50m)
+        // 1. Draw concentric distance reference rings
         val rings = floatArrayOf(2f, 5f, 10f, 20f, 40f)
         for (r in rings) {
             val radiusPx = r * pixelsPerMeter
@@ -144,9 +138,6 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         // 2. Draw 95% Confidence Ellipse
         canvas.save()
         canvas.translate(cx, cy)
-        // Convert math orientation (CCW from East) to Canvas rotation (CW from East/X)
-        // In Canvas: +X is East (right), +Y is South (down).
-        // Since North is -Y, orientation in ENU maps to -orientationDeg in Canvas.
         canvas.rotate(-ellipse.orientationDeg)
 
         val aPx = ellipse.semiMajorAxisM * pixelsPerMeter
@@ -164,16 +155,16 @@ class ConfidenceEllipseView @JvmOverloads constructor(
 
         canvas.restore()
 
-        // 4. Draw Vehicle Pointer (triangle centered at cx, cy, rotated by heading)
+        // 4. Draw Vehicle Pointer
         canvas.save()
         canvas.translate(cx, cy)
-        canvas.rotate(headingDeg) // 0 deg is North (-Y in Canvas)
+        canvas.rotate(headingDeg)
 
         path.reset()
-        path.moveTo(0f, -22f) // Forward tip
-        path.lineTo(-14f, 16f) // Left rear
-        path.lineTo(0f, 10f)   // Center indent
-        path.lineTo(14f, 16f)  // Right rear
+        path.moveTo(0f, -22f)
+        path.lineTo(-14f, 16f)
+        path.lineTo(0f, 10f)
+        path.lineTo(14f, 16f)
         path.close()
 
         canvas.drawPath(path, vehiclePaint)
@@ -183,7 +174,8 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         // 5. Render HUD Overlay Metrics
         val hudTextY = 50.0f
         canvas.drawText("Mode: $mode", 30.0f, hudTextY, textPaint)
-        canvas.drawText("Trust: ${(trustScore * 100).toInt()}%", 30.0f, hudTextY + 40.0f, textPaint)
+        val nisStr = if (nisPassed) "PASS" else "FAIL"
+        canvas.drawText("Trust: ${(trustScore * 100).toInt()}% | NIS: $nisStr", 30.0f, hudTextY + 40.0f, textPaint)
         canvas.drawText("95% Uncertainty: ±${String.format("%.1f", ellipse.semiMajorAxisM)} m", 30.0f, hudTextY + 80.0f, textPaint)
         canvas.drawText("Semi-Axes: [a=${String.format("%.2f", ellipse.semiMajorAxisM)}m, b=${String.format("%.2f", ellipse.semiMinorAxisM)}m]", 30.0f, hudTextY + 120.0f, textPaint)
     }
