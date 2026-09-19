@@ -62,3 +62,16 @@ All 7 module parity suites were executed and verified on the JVM via Android Stu
 1. **Unused Parameters**: Stripped unused `alpha` and `timestamp` function arguments across `ErrorStateEKF.kt` and `FusionEngine.kt`.
 2. **Variable Shadowing**: Fixed variable shadowing (`item`, `row` vs `sample`) in `AICorrectionModule.kt`.
 3. **Dead Code Elimination**: Cleaned up unused return variables in `FusionEngine.kt` by exposing `gnssVelPassed`, `trustScore`, and `cov_2d`.
+
+---
+
+## Real-Time Update Rate & Hardware Latency Validation
+
+### 1. Locked Benchmark Specification (`docs/BENCHMARKS.md`)
+- **Mobile App GNSS+INS Fusion Update Rate**: `10 Hz` ($100.0\text{ ms}$ period).
+- **Edge Engine Update Rate**: `~200 Hz` ($5.0\text{ ms}$ period, designated for Phase 12).
+
+### 2. Desktop JVM vs On-Device Profiling Note
+- **Desktop JVM Simulation (`FusionEnginePlaybackTest.kt`)**: 200 epochs ($20.0\text{ s}$ drive playback) executed in $\approx 0.5\text{ ms}$ average step latency, verifying numerical soundness and algorithmic throughput under desktop JVM conditions.
+- **On-Device ARM Profiling Requirement**: As specified in `docs/BENCHMARKS.md`, wall-clock update rates and step latencies on real target hardware (Android physical device or emulator running ARM architecture) can diverge significantly due to EJML matrix allocations, TFLite delegate overhead, and GC pauses. Formal 10 Hz verification must be recorded on real target hardware before marking Phase 11 complete in `docs/PHASE_CHECKLIST.md`.
+
