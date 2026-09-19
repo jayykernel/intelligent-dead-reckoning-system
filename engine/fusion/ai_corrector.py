@@ -41,15 +41,13 @@ class AICorrectionModule:
     def process_imu_sample(
         self,
         acc_raw: np.ndarray,
-        gyro_raw: np.ndarray,
-        in_gnss_outage: bool = False
+        gyro_raw: np.ndarray
     ) -> Tuple[Optional[float], float, float]:
         """
         Process a single incoming 6-DOF IMU sample.
 
         acc_raw: (3,) Specific force in phone frame (m/s^2)
         gyro_raw: (3,) Angular rate in phone frame (rad/s)
-        in_gnss_outage: Boolean flag indicating if GNSS is currently denied
 
         Returns:
         (ai_speed_estimate_or_None, adaptive_sigma_speed, process_noise_scaling)
@@ -76,7 +74,7 @@ class AICorrectionModule:
 
         # 2. Run TFLite inference if available
         pred_speed = None
-        if self.speed_filter is not None and in_gnss_outage:
+        if self.speed_filter is not None:
             try:
                 pred_speed = self.speed_filter.predict_window(window)
                 pred_speed = max(0.0, float(pred_speed))

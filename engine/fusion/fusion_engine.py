@@ -210,8 +210,7 @@ class GNSSINSFusionEngine:
         # 3. AI Correction Module (N7) - Process vibration & predict speed
         ai_speed, sigma_ai, q_scale = self.ai_corrector.process_imu_sample(
             acc_raw=acc_raw,
-            gyro_raw=gyro_raw,
-            in_gnss_outage=(not is_gnss_available)
+            gyro_raw=gyro_raw
         )
 
         # 4. EKF State Propagation
@@ -253,8 +252,8 @@ class GNSSINSFusionEngine:
                 timestamp=timestamp
             )
 
-        # Apply AI Forward Speed update during GNSS outages if available
-        if not is_gnss_available and ai_speed is not None:
+        # Apply AI Forward Speed update continuously as an aiding measurement
+        if ai_speed is not None:
             self.ekf.update_ai_forward_speed(
                 speed_fwd=ai_speed,
                 sigma_speed=sigma_ai,
