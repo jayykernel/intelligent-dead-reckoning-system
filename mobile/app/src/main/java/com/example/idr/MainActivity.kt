@@ -29,7 +29,8 @@ class MainActivity : AppCompatActivity() {
             pEN = 0.2,
             mode = "GNSS_AIDED",
             trust = 1.0f,
-            heading = 0.0f
+            heading = 0.0f,
+            nisPassed = true
         )
     }
 
@@ -42,7 +43,8 @@ class MainActivity : AppCompatActivity() {
         pEN: Double,
         mode: String,
         trust: Float,
-        heading: Float
+        heading: Float,
+        nisPassed: Boolean
     ) {
         ellipseView.updateState(
             pEE = pEE,
@@ -50,7 +52,8 @@ class MainActivity : AppCompatActivity() {
             pEN = pEN,
             currentMode = mode,
             trust = trust,
-            heading = heading
+            heading = heading,
+            nisPassed = nisPassed
         )
 
         val trace = pEE + pNN

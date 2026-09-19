@@ -1,6 +1,6 @@
 plugins {
-    id("com.android.application") version "8.2.0"
-    id("org.jetbrains.kotlin.android") version "1.9.20"
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -54,7 +54,11 @@ dependencies {
     // OSMDroid for map display
     implementation("org.osmdroid:osmdroid-android:6.1.14")
 
+    // EJML for native matrix linear algebra operations
+    implementation("org.ejml:ejml-simple:0.43")
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

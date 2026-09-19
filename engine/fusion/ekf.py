@@ -147,13 +147,11 @@ class ErrorStateEKF:
         # delta_x = [delta_p (0..2), delta_v (3..5), delta_theta (6..8), delta_b_a (9..11), delta_b_g (12..14)]
         F = np.eye(15)
         F[0:3, 3:6] = np.eye(3) * dt
-        # F[0:3, 6:9] = -0.5 * R @ self.skew_symmetric(acc_corr) * dt**2 (using acc_corr as specific force)
         F[0:3, 6:9] = -0.5 * R @ self.skew_symmetric(acc_corr) * dt**2
-        F[0:3, 9:12] = 0.5 * R * dt**2
+        F[0:3, 9:12] = -0.5 * R * dt**2  # Correct negative sign for accel bias coupling
 
-        # F[3:6, 6:9] = - R @ self.skew_symmetric(acc_corr) * dt
         F[3:6, 6:9] = -R @ self.skew_symmetric(acc_corr) * dt
-        F[3:6, 9:12] = R * dt
+        F[3:6, 9:12] = -R * dt           # Correct negative sign for accel bias coupling
 
         # F[6:9, 6:9] = I - skew(gyro_corr) * dt
         F[6:9, 6:9] = np.eye(3) - self.skew_symmetric(gyro_corr) * dt
@@ -339,7 +337,7 @@ class ErrorStateEKF:
         Update with absolute Heading measurement (geographic heading: 0 = North, +pi/2 = East, in rad).
         In ENU Navigation frame:
         Vehicle Y (forward) column in R: R[0, 1] = East, R[1, 1] = North.
-        Geographic heading psi = atan2(R[0, 1], R[1, 1]).
+        Geographic heading psi = atan2(R[0, 1], R[1, 1]) = atan2(East, North).
         """
         R = self.quat_to_rot(self.q)
         current_yaw = float(np.arctan2(R[0, 1], R[1, 1]))
@@ -386,6 +384,76 @@ class ErrorStateEKF:
         R_cov = np.array([[sigma_speed**2]])
 
         return self.update(z, h_x, H, R_cov, update_type="AI_SPEED", alpha=alpha, timestamp=timestamp)
+
+    def update_zupt(
+        self,
+        sigma_zupt: float = 0.05,
+        alpha: float = 0.01,
+        timestamp: float = 0.0
+    ) -> Tuple[bool, float, float]:
+        """
+        Zero Velocity Update (ZUPT) when vehicle is stationary.
+        z = [0, 0, 0] (m/s) in Nav frame.
+        h(x) = v_nav
+        H = [0_{3x3}, I_{3x3}, 0_{3x3}, 0_{3x3}, 0_{3x3}]
+        """
+        z = np.zeros(3)
+        h_x = self.v
+        H = np.zeros((3, 15))
+        H[0:3, 3:6] = np.eye(3)
+        R_cov = np.eye(3) * (sigma_zupt**2)
+
+        return self.update(z, h_x, H, R_cov, update_type="ZUPT", alpha=alpha, timestamp=timestamp)
+
+    def update_nhc(
+        self,
+        vehicle_type: str = "car",
+        lean_angle_rad: float = 0.0,
+        sigma_nhc_x: float = 0.2,
+        sigma_nhc_z: float = 0.2,
+        alpha: float = 0.01,
+        timestamp: float = 0.0
+    ) -> Tuple[bool, float, float]:
+        """
+        Non-Holonomic Constraints (NHC) measurement update.
+        For Car: lateral (X) and vertical (Z) velocities in vehicle frame are 0.
+        For Two-Wheeler: lateral (X) and vertical (Z) velocities in lean-compensated road frame are 0 (N1).
+        """
+        R = self.quat_to_rot(self.q)
+        v_veh = R.T @ self.v
+
+        if vehicle_type == "two_wheeler" and abs(lean_angle_rad) > 1e-4:
+            phi = lean_angle_rad
+            c, s = np.cos(phi), np.sin(phi)
+            # R_y: rotation around vehicle Y-axis (forward) by -phi
+            R_y = np.array([
+                [c, 0.0, s],
+                [0.0, 1.0, 0.0],
+                [-s, 0.0, c]
+            ])
+            M = R_y @ R.T  # (3, 3)
+            N = R_y @ self.skew_symmetric(v_veh)  # (3, 3)
+            v_meas = R_y @ v_veh
+        else:
+            M = R.T  # (3, 3)
+            N = self.skew_symmetric(v_veh)  # (3, 3)
+            v_meas = v_veh
+
+        # Measurement: z = [0, 0] (lateral X, vertical Z)
+        z = np.zeros(2)
+        h_x = np.array([v_meas[0], v_meas[2]])
+
+        H = np.zeros((2, 15))
+        # Derivative w.r.t delta_v
+        H[0, 3:6] = M[0, :]
+        H[1, 3:6] = M[2, :]
+        # Derivative w.r.t delta_theta
+        H[0, 6:9] = N[0, :]
+        H[1, 6:9] = N[2, :]
+
+        R_cov = np.diag([sigma_nhc_x**2, sigma_nhc_z**2])
+
+        return self.update(z, h_x, H, R_cov, update_type="NHC", alpha=alpha, timestamp=timestamp)
 
     def get_position_covariance_2d(self) -> np.ndarray:
         """Return 2x2 horizontal position covariance matrix (East, North)."""

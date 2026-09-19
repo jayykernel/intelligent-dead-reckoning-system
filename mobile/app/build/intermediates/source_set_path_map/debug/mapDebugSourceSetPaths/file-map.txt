@@ -1,0 +1,35 @@
+com.example.idr.app-osmdroid-android-6.1.14-0 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\049cf3b2bafe61d4b1f23b960290edfe\transformed\osmdroid-android-6.1.14\res
+com.example.idr.app-appcompat-resources-1.6.1-1 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\06d6748a76ae186bcf2a013203889041\transformed\appcompat-resources-1.6.1\res
+com.example.idr.app-drawerlayout-1.1.1-2 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\10a2fb1c87fe4e0137f1574e7d314e20\transformed\drawerlayout-1.1.1\res
+com.example.idr.app-recyclerview-1.1.0-3 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\12818421208d2f37d70cd4cc84418e9c\transformed\recyclerview-1.1.0\res
+com.example.idr.app-emoji2-views-helper-1.2.0-4 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\26f6a8ada91027efe05b6081f39cfcb4\transformed\emoji2-views-helper-1.2.0\res
+com.example.idr.app-viewpager2-1.0.0-5 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\4663f41c2d7b0b539e3db13054da1c4e\transformed\viewpager2-1.0.0\res
+com.example.idr.app-material-1.11.0-6 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\47302d8fd1a745be23a07fdaafba869e\transformed\material-1.11.0\res
+com.example.idr.app-profileinstaller-1.3.0-7 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\4834ceb8eb734af294954324a3f1652e\transformed\profileinstaller-1.3.0\res
+com.example.idr.app-constraintlayout-2.1.4-8 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\60253d2b3a827e5946fc00e72a4f4a6c\transformed\constraintlayout-2.1.4\res
+com.example.idr.app-fragment-1.3.6-9 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\61407c69f4b83332e648b44902c46a44\transformed\fragment-1.3.6\res
+com.example.idr.app-activity-1.8.0-10 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\71f458e7592ebe505836fb4260714d69\transformed\activity-1.8.0\res
+com.example.idr.app-appcompat-1.6.1-11 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\7417d8c619773e32092d3532d18f8a8b\transformed\appcompat-1.6.1\res
+com.example.idr.app-core-runtime-2.2.0-12 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\7505b45e0dd1a1cf50ac7dac560ad118\transformed\core-runtime-2.2.0\res
+com.example.idr.app-transition-1.2.0-13 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\7b02f36c1a192b4b1a2fa7f40f0d6b41\transformed\transition-1.2.0\res
+com.example.idr.app-coordinatorlayout-1.1.0-14 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\8a28e0a7d0f7c696110756705495b9db\transformed\coordinatorlayout-1.1.0\res
+com.example.idr.app-lifecycle-livedata-core-2.6.1-15 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\9c193541cf8aaa444337dec6a937b12e\transformed\lifecycle-livedata-core-2.6.1\res
+com.example.idr.app-emoji2-1.2.0-16 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\9e9c674b632de5e139bc5906d051fe70\transformed\emoji2-1.2.0\res
+com.example.idr.app-core-ktx-1.12.0-17 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\9f0049873d32c5bfa35f92c7419ccda3\transformed\core-ktx-1.12.0\res
+com.example.idr.app-cardview-1.0.0-18 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\a676a5a9cafe721a3824ab426c6130f3\transformed\cardview-1.0.0\res
+com.example.idr.app-core-1.12.0-19 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\b2adead3c965649ab169fcf445a5dcfe\transformed\core-1.12.0\res
+com.example.idr.app-lifecycle-process-2.6.1-20 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\b9c0837a207c4e82b05262524d18ecfa\transformed\lifecycle-process-2.6.1\res
+com.example.idr.app-savedstate-1.2.1-21 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\d17f7647b381e8b69c5d7b91cb72d6ae\transformed\savedstate-1.2.1\res
+com.example.idr.app-annotation-experimental-1.3.0-22 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\dd8e0133d306f9a5fa89012c9231423b\transformed\annotation-experimental-1.3.0\res
+com.example.idr.app-lifecycle-livedata-2.6.1-23 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\e4ec7e11193d40b1cf7462cdfaa40587\transformed\lifecycle-livedata-2.6.1\res
+com.example.idr.app-lifecycle-viewmodel-2.6.1-24 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\ea8ae6d99f33ae9e8c486bf3c232c12d\transformed\lifecycle-viewmodel-2.6.1\res
+com.example.idr.app-startup-runtime-1.1.1-25 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\f777a77e2ba32ab77a03adcce7c66046\transformed\startup-runtime-1.1.1\res
+com.example.idr.app-lifecycle-runtime-2.6.1-26 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\f8465fb6725656d9748f1b9f79c6f43d\transformed\lifecycle-runtime-2.6.1\res
+com.example.idr.app-lifecycle-viewmodel-savedstate-2.6.1-27 C:\Users\JAYANITHYAN M R\.gradle\caches\8.9\transforms\ff11ca3df915f2f748d58330f77f8b20\transformed\lifecycle-viewmodel-savedstate-2.6.1\res
+com.example.idr.app-pngs-28 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\generated\res\pngs\debug
+com.example.idr.app-resValues-29 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\generated\res\resValues\debug
+com.example.idr.app-packageDebugResources-30 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.idr.app-packageDebugResources-31 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.idr.app-debug-32 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.example.idr.app-debug-33 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\src\debug\res
+com.example.idr.app-main-34 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\src\main\res

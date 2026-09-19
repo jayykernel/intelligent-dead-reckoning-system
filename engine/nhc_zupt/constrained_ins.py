@@ -22,30 +22,27 @@ class ConstrainedINS:
         self.zupt_gyro_threshold = zupt_gyro_threshold
         self.g = 9.80665
 
-    def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray) -> bool:
+    def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray = None) -> bool:
         """
-        Detect if the vehicle is stationary based on specific force and gyro.
+        Detect if the vehicle is stationary based on specific force, gyro, and current velocity estimate.
         """
         acc_mag = np.linalg.norm(acc_veh)
         gyro_mag = np.linalg.norm(gyro_veh)
-        return (abs(acc_mag - self.g) < self.zupt_acc_threshold) and (gyro_mag < self.zupt_gyro_threshold)
+
+        imu_quiet = (abs(acc_mag - self.g) < self.zupt_acc_threshold) and (gyro_mag < self.zupt_gyro_threshold)
+
+        if v_veh is not None:
+            v_mag = np.linalg.norm(v_veh)
+            return imu_quiet and (v_mag < self.zupt_speed_threshold)
+
+        return imu_quiet
 
     def constrain(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray, vehicle_type: str, lean_angle_rad: float = 0.0) -> np.ndarray:
         """
         Apply NHC/ZUPT or lean-compensated NHC to the vehicle-frame velocity.
-
-        Parameters:
-            acc_veh: (3,) specific force in vehicle frame (m/s^2)
-            gyro_veh: (3,) angular rate in vehicle frame (rad/s)
-            v_veh: (3,) velocity in vehicle frame (m/s) [v_x, v_y, v_z]
-            vehicle_type: 'car' or 'two_wheeler'
-            lean_angle_rad: lean angle in radians (positive for right lean) - only used if vehicle_type == 'two_wheeler'
-
-        Returns:
-            v_constrained: (3,) constrained velocity in vehicle frame
         """
         # ZUPT: if stopped, set velocity to zero
-        if self._is_stopped(acc_veh, gyro_veh):
+        if self._is_stopped(acc_veh, gyro_veh, v_veh):
             return np.zeros(3)
 
         if vehicle_type == 'car':
