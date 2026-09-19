@@ -78,6 +78,13 @@ class GNSSINSFusionEngine:
         self.classifier_buffer: List[np.ndarray] = []
         self.classifier_window_size = 20
 
+        # Seamless Mode Handler (Phase 9) state machine
+        self.mode_low_trust_threshold = 0.2   # below this, consider transitioning to pure INS
+        self.mode_high_trust_threshold = 0.8  # above this, consider transitioning to GNSS aided
+        self.mode_min_time_in_state = 1.0     # minimum seconds to stay in a state before allowing a transition back
+        self.mode_current_state = "GNSS_AIDED"  # start in GNSS aided assuming we have good signal initially
+        self.mode_time_in_state = 0.0
+
         # State histories for logging
         self.trajectory_pos = []
         self.trajectory_vel = []
@@ -278,13 +285,33 @@ class GNSSINSFusionEngine:
         gnss_vel_passed = False
 
         # Calculate early trust signal using raw GNSS measurements
-        trust_score = self.outage_predictor.update(
-            avg_cn0=gnss_avg_cn0,
-            sat_count=gnss_sat_count,
-            accuracy_m=gnss_acc_m
-        )
+        if is_gnss_available:
+            trust_score = self.outage_predictor.update(
+                avg_cn0=gnss_avg_cn0,
+                sat_count=gnss_sat_count,
+                accuracy_m=gnss_acc_m
+            )
+        else:
+            # When GNSS is not available, trust it zero.
+            trust_score = 0.0
 
-        if is_gnss_available and gnss_pos_enu is not None:
+        # Update the seamless mode handler state machine (Phase 9)
+        self.mode_time_in_state += self.dt
+        if self.mode_current_state == "GNSS_AIDED":
+            if trust_score < self.mode_low_trust_threshold and self.mode_time_in_state >= self.mode_min_time_in_state:
+                # Transition to pure INS
+                self.mode_current_state = "PURE_DEAD_RECKONING"
+                self.mode_time_in_state = 0.0
+        else:  # current state is PURE_DEAD_RECKONING
+            if trust_score > self.mode_high_trust_threshold and self.mode_time_in_state >= self.mode_min_time_in_state:
+                # Transition to GNSS aided
+                self.mode_current_state = "GNSS_AIDED"
+                self.mode_time_in_state = 0.0
+
+        # The mode is now determined by the state machine
+        mode = self.mode_current_state
+
+        if self.mode_current_state == "GNSS_AIDED" and is_gnss_available and gnss_pos_enu is not None:
             # Dynamically scale the measurement uncertainty based on trust
             # lower trust -> higher uncertainty -> less weight on GNSS
             dynamic_sigma_pos = 5.0 / max(0.1, np.sqrt(trust_score))
@@ -324,7 +351,6 @@ class GNSSINSFusionEngine:
                     )
 
         # Record histories
-        mode = "GNSS_AIDED" if is_gnss_available else "PURE_DEAD_RECKONING"
         self.trajectory_pos.append(np.copy(self.ekf.p))
         self.trajectory_vel.append(np.copy(self.ekf.v))
         self.trajectory_cov_2d.append(np.copy(self.ekf.get_position_covariance_2d()))

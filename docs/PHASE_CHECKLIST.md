@@ -122,8 +122,8 @@ execution protocol and commit convention.
 ---
 
 ### Phase 9 — Seamless Mode Transition Handler
-- [ ] State machine for GNSS-aided-INS ↔ pure-INS implemented
-- [ ] Transition latency measured against the millisecond budget in
+- [x] State machine for GNSS-aided-INS ↔ pure-INS implemented
+- [x] Transition latency measured against the millisecond budget in
   `docs/BENCHMARKS.md`
 - **Exit criteria**: measured transition time meets benchmark; no UI
   freeze/jump at transition in manual test.
