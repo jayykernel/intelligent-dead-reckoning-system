@@ -228,9 +228,7 @@ class ErrorStateEKF(
         hX: DoubleArray,
         H: SimpleMatrix,
         RCov: SimpleMatrix,
-        updateType: String = "GNSS_POS",
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0
+        updateType: String = "GNSS_POS"
     ): Triple<Boolean, Double, Double> {
         val m = z.size
 
@@ -320,33 +318,27 @@ class ErrorStateEKF(
 
     fun updateGnssPosition(
         pGnssEnu: DoubleArray,
-        sigmaPos: Double = 3.0,
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0
+        sigmaPos: Double = 3.0
     ): Triple<Boolean, Double, Double> {
         val H = SimpleMatrix(3, 15)
         for (i in 0..2) H.set(i, i, 1.0)
         val RCov = SimpleMatrix.identity(3).scale(sigmaPos * sigmaPos)
-        return update(pGnssEnu, p, H, RCov, updateType = "GNSS_POS", alpha = alpha, timestamp = timestamp)
+        return update(pGnssEnu, p, H, RCov, updateType = "GNSS_POS")
     }
 
     fun updateGnssVelocity(
         vGnssEnu: DoubleArray,
-        sigmaVel: Double = 0.5,
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0
+        sigmaVel: Double = 0.5
     ): Triple<Boolean, Double, Double> {
         val H = SimpleMatrix(3, 15)
         for (i in 0..2) H.set(i, 3 + i, 1.0)
         val RCov = SimpleMatrix.identity(3).scale(sigmaVel * sigmaVel)
-        return update(vGnssEnu, v, H, RCov, updateType = "GNSS_VEL", alpha = alpha, timestamp = timestamp)
+        return update(vGnssEnu, v, H, RCov, updateType = "GNSS_VEL")
     }
 
     fun updateHeading(
         headingRad: Double,
         sigmaHeading: Double = Math.toRadians(5.0),
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0,
         source: String = "MAG_HEADING"
     ): Triple<Boolean, Double, Double> {
         val R = quatToRot(q)
@@ -359,14 +351,12 @@ class ErrorStateEKF(
         H.set(0, 8, -1.0) // delta_theta_z
 
         val RCov = SimpleMatrix(1, 1, true, sigmaHeading * sigmaHeading)
-        return update(z, hX, H, RCov, updateType = source, alpha = alpha, timestamp = timestamp)
+        return update(z, hX, H, RCov, updateType = source)
     }
 
     fun updateAiForwardSpeed(
         speedFwd: Double,
-        sigmaSpeed: Double = 1.0,
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0
+        sigmaSpeed: Double = 1.0
     ): Triple<Boolean, Double, Double> {
         val R = quatToRot(q)
         val yAxisNav = doubleArrayOf(R.get(0, 1), R.get(1, 1), R.get(2, 1))
@@ -386,29 +376,25 @@ class ErrorStateEKF(
         for (i in 0..2) H.set(0, 6 + i, crossProduct[i])
 
         val RCov = SimpleMatrix(1, 1, true, sigmaSpeed * sigmaSpeed)
-        return update(z, hX, H, RCov, updateType = "AI_SPEED", alpha = alpha, timestamp = timestamp)
+        return update(z, hX, H, RCov, updateType = "AI_SPEED")
     }
 
     fun updateZupt(
-        sigmaZupt: Double = 0.05,
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0
+        sigmaZupt: Double = 0.05
     ): Triple<Boolean, Double, Double> {
         val z = doubleArrayOf(0.0, 0.0, 0.0)
         val hX = v.copyOf()
         val H = SimpleMatrix(3, 15)
         for (i in 0..2) H.set(i, 3 + i, 1.0)
         val RCov = SimpleMatrix.identity(3).scale(sigmaZupt * sigmaZupt)
-        return update(z, hX, H, RCov, updateType = "ZUPT", alpha = alpha, timestamp = timestamp)
+        return update(z, hX, H, RCov, updateType = "ZUPT")
     }
 
     fun updateNhc(
         vehicleType: String = "car",
         leanAngleRad: Double = 0.0,
         sigmaNhcX: Double = 0.2,
-        sigmaNhcZ: Double = 0.2,
-        alpha: Double = 0.01,
-        timestamp: Double = 0.0
+        sigmaNhcZ: Double = 0.2
     ): Triple<Boolean, Double, Double> {
         val R = quatToRot(q)
         val vMat = SimpleMatrix(3, 1, true, *v)
@@ -454,7 +440,7 @@ class ErrorStateEKF(
             0.0, sigmaNhcZ * sigmaNhcZ
         ))
 
-        return update(z, hX, H, RCov, updateType = "NHC", alpha = alpha, timestamp = timestamp)
+        return update(z, hX, H, RCov, updateType = "NHC")
     }
 
     fun getPositionCovariance2d(): SimpleMatrix {

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.example.idr.fusion.ErrorStateEKFTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-19T09:14:39" hostname="JAYA-LAPTOP" time="0.231">
+<testsuite name="com.example.idr.fusion.ErrorStateEKFTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-19T12:15:55.946Z" hostname="JAYA-LAPTOP" time="0.144">
   <properties/>
-  <testcase name="testErrorStateEKFNumericalParity" classname="com.example.idr.fusion.ErrorStateEKFTest" time="0.231"/>
+  <testcase name="testErrorStateEKFNumericalParity" classname="com.example.idr.fusion.ErrorStateEKFTest" time="0.144"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

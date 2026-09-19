@@ -1,0 +1,50 @@
+[
+  {
+    "segment_id": 0,
+    "osm_way_id": 1001,
+    "p_start": [
+      0.0,
+      0.0
+    ],
+    "p_end": [
+      100.0,
+      0.0
+    ],
+    "highway_type": "primary",
+    "oneway": false,
+    "length": 100.0,
+    "bearing_deg": 90.0
+  },
+  {
+    "segment_id": 1,
+    "osm_way_id": 1002,
+    "p_start": [
+      50.0,
+      0.0
+    ],
+    "p_end": [
+      50.0,
+      100.0
+    ],
+    "highway_type": "secondary",
+    "oneway": false,
+    "length": 100.0,
+    "bearing_deg": 0.0
+  },
+  {
+    "segment_id": 2,
+    "osm_way_id": 1003,
+    "p_start": [
+      0.0,
+      60.0
+    ],
+    "p_end": [
+      100.0,
+      60.0
+    ],
+    "highway_type": "residential",
+    "oneway": false,
+    "length": 100.0,
+    "bearing_deg": 90.0
+  }
+]
