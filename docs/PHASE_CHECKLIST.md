@@ -131,9 +131,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 10 — Confidence Ellipse UI
-- [ ] Navigation UI renders covariance ellipse tied to real fusion covariance
+- [x] Navigation UI renders covariance ellipse tied to real fusion covariance
   (N4), not a cosmetic animation
-- [ ] Ellipse grows during INS-only drift, tightens on NIS-passing GNSS update
+- [x] Ellipse grows during INS-only drift, tightens on NIS-passing GNSS update
 - **Exit criteria**: visual behavior verified against logged covariance values
   side by side (screenshot/plot pair).
 
