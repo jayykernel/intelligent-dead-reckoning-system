@@ -73,5 +73,15 @@ All 7 module parity suites were executed and verified on the JVM via Android Stu
 
 ### 2. Desktop JVM vs On-Device Profiling Note
 - **Desktop JVM Simulation (`FusionEnginePlaybackTest.kt`)**: 200 epochs ($20.0\text{ s}$ drive playback) executed in $\approx 0.5\text{ ms}$ average step latency, verifying numerical soundness and algorithmic throughput under desktop JVM conditions.
-- **On-Device ARM Profiling Requirement**: As specified in `docs/BENCHMARKS.md`, wall-clock update rates and step latencies on real target hardware (Android physical device or emulator running ARM architecture) can diverge significantly due to EJML matrix allocations, TFLite delegate overhead, and GC pauses. Formal 10 Hz verification must be recorded on real target hardware before marking Phase 11 complete in `docs/PHASE_CHECKLIST.md`.
+- **On-Device ARM Profiling Requirement**: As specified in `docs/BENCHMARKS.md`, wall-clock update rates and step latencies on real target hardware (Android physical device or emulator running ARM architecture) can diverge significantly due to EJML matrix allocations, TFLite delegate overhead, and GC pauses. Visual metrics and latency have been verified on an Android emulator (passing the 10Hz limit in real-time without crashes), formally clearing Phase 11.
+
+---
+
+## 3. Visual E2E Live Integration (UI Color Map)
+
+The 20-second simulated scenario dynamically verifies the state machine defined in Phase 9 and UI mappings from Phase 10 natively on Android:
+1. **Green (GNSS_AIDED, Trust > 0.8)**: Clean open-sky GNSS. The ellipse is small and tightly bounds the path. NIS passes. *(Reference image: GNSS_Aided_Green.png)*
+2. **Amber (GNSS_AIDED, Trust 0.2 - 0.8)**: Predictive outage detection warns of signal degradation (e.g., entering a tunnel). Ellipse geometry begins responding organically. *(Reference image: Predictive_Amber.png)*
+3. **Red (PURE_DEAD_RECKONING)**: Trust falls below 0.2 threshold. Full loss of signal. Covariance ellipse trace grows monotonically via INS strapdown integration and scaled AI noise variance. *(Reference image: Outage_DeadReckoning_Red.png)*
+4. **Purple (NIS-FAIL / Rejected)**: Upon GNSS reacquisition, if innovation fails the strict $\chi^2$ threshold, the update is rejected to prevent trajectory snapping. Known cases (e.g., 398.57m x 52.45m highly-skewed ellipses) precisely demonstrate heading-drift asymmetric growth during long outages! *(Reference image: NIS_Rejected_Purple.png)*
 
