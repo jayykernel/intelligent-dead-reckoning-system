@@ -3,6 +3,7 @@ package com.example.idr
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log // Add this
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.idr.fusion.FusionEngine
@@ -13,6 +14,8 @@ import com.example.idr.ui.ConfidenceEllipseView
  * and real-time Native Kotlin Fusion Engine integration (Phase 11).
  */
 class MainActivity : AppCompatActivity() {
+
+    private val TAG = "IDR_Main"
 
     private lateinit var ellipseView: ConfidenceEllipseView
     private lateinit var tvFilterStatus: TextView
@@ -30,6 +33,10 @@ class MainActivity : AppCompatActivity() {
 
             simEpoch++
             simTime += 0.1
+
+            if (simEpoch % 10 == 0) { // Log every 1 second (10Hz)
+                Log.d(TAG, "Playback stepping: epoch=$simEpoch, time=$simTime")
+            }
 
             // Multi-phase test drive loop:
             // 0..60 (0-6s): Good GNSS (Open sky)

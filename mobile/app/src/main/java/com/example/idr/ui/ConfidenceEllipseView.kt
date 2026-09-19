@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.util.Log
 import android.view.View
 
 /**
@@ -24,6 +25,8 @@ class ConfidenceEllipseView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
+    private val TAG = "IDR_EllipseView"
+
     // Current State Parameters
     private var ellipse: ConfidenceEllipse = ConfidenceEllipse(semiMajorAxisM = 2.0f, semiMinorAxisM = 1.5f, orientationDeg = 0.0f)
     private var mode: String = "GNSS_AIDED"
@@ -35,11 +38,24 @@ class ConfidenceEllipseView @JvmOverloads constructor(
     private var pixelsPerMeter: Float = 8.0f
 
     // Drawing Paints
-    private val ellipseFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val ellipseStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3.5f }
+    private val backgroundPaint = Paint().apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+    }
+
+    private val ellipseFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(45, 46, 125, 50) // Default green fill
+    }
+    private val ellipseStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 4.0f
+        color = Color.rgb(46, 125, 50) // Default green stroke
+    }
     private val oneSigmaStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2.0f
+        color = Color.argb(120, 46, 125, 50)
         pathEffect = DashPathEffect(floatArrayOf(10f, 10f), 0f)
     }
 
@@ -57,16 +73,27 @@ class ConfidenceEllipseView @JvmOverloads constructor(
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1.5f
-        color = Color.argb(40, 150, 150, 150)
+        color = Color.argb(50, 150, 150, 150)
     }
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.DKGRAY
-        textSize = 32.0f
+        color = Color.rgb(20, 20, 20) // Solid dark text
+        textSize = 38.0f
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
 
     private val ovalRect = RectF()
     private val path = Path()
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        Log.d(TAG, "onSizeChanged: width=$w, height=$h")
+        if (w > 0) {
+            val maxAxisM = ellipse.semiMajorAxisM.coerceAtLeast(1.0f)
+            this.pixelsPerMeter = (w / (maxAxisM * 3.2f)).coerceIn(1.5f, 25.0f)
+            invalidate()
+        }
+    }
 
     /**
      * Update the visual state directly from the fusion engine output.
@@ -80,6 +107,7 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         heading: Float,
         nisPassed: Boolean
     ) {
+        Log.d(TAG, "updateState: mode=$currentMode, trust=$trust, nisPassed=$nisPassed, pEE=$pEE, pNN=$pNN")
         this.ellipse = ConfidenceEllipse.fromCovariance(pEE, pNN, pEN)
         this.mode = currentMode
         this.trustScore = trust
@@ -113,15 +141,22 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         }
 
         // Auto-scale pixels per meter so the ellipse always fits nicely on screen
-        val maxAxisM = ellipse.semiMajorAxisM.coerceAtLeast(1.0f)
-        val targetPpm = (width / (maxAxisM * 3.2f)).coerceIn(1.5f, 25.0f)
-        this.pixelsPerMeter = targetPpm
+        if (width > 0) {
+            val maxAxisM = ellipse.semiMajorAxisM.coerceAtLeast(1.0f)
+            val targetPpm = (width / (maxAxisM * 3.2f)).coerceIn(1.5f, 25.0f)
+            this.pixelsPerMeter = targetPpm
+        }
 
         invalidate() // Request redraw
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
+        if (width == 0 || height == 0) return
+
+        // 0. Ensure solid white canvas background
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
 
         val cx = width / 2.0f
         val cy = height / 2.0f
