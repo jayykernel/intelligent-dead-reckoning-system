@@ -130,6 +130,9 @@ class FusionEngine(
         // Compute overall GNSS pass status: if we have input, we require it to have passed
         val gnssPassed = (gnssPosEnu == null || gnssPosPassed) && (gnssVelEnu == null || gnssVelPassed)
 
+        val cov2dMat = ekf.getPositionCovariance2d()
+        val cov2dArr = doubleArrayOf(cov2dMat.get(0, 0), cov2dMat.get(1, 1), cov2dMat.get(0, 1)) // pEE, pNN, pEN
+
         return mapOf(
             "pos" to ekf.p.copyOf(),
             "vel" to ekf.v.copyOf(),
@@ -138,7 +141,7 @@ class FusionEngine(
             "gnss_vel_passed" to gnssVelPassed,
             "gnss_passed" to gnssPassed,
             "trust_score" to trustScore,
-            "cov_2d" to ekf.getPositionCovariance2d(),
+            "cov_2d" to cov2dArr,
             "heading" to headingDeg
         )
     }

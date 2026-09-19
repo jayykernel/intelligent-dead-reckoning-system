@@ -57,9 +57,9 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    // TensorFlow Lite for on-device inference
-    implementation("org.tensorflow:tensorflow-lite:2.14.0")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    // Google AI Edge LiteRT for on-device inference (successor to TensorFlow Lite)
+    implementation("com.google.ai.edge.litert:litert:1.0.1")
+    implementation("com.google.ai.edge.litert:litert-support:1.0.1")
 
     // OSMDroid for map display
     implementation("org.osmdroid:osmdroid-android:6.1.14")
