@@ -140,9 +140,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 11 — Mobile App Integration
-- [ ] All engine modules wired into `/mobile` via TFLite + shared logic
-- [ ] Real-time pipeline running at required update rate (see BENCHMARKS.md)
-- [ ] Full navigation UI functional end to end
+- [x] All engine modules wired into `/mobile` via TFLite + shared logic
+- [x] Real-time pipeline running at required update rate (see BENCHMARKS.md)
+- [x] Full navigation UI functional end to end
 - **Exit criteria**: live test drive (or recorded playback) runs start to
   finish with no crashes, correct mode switching, ellipse rendering.
 
