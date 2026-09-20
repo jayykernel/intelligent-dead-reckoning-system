@@ -198,7 +198,12 @@ class HMMMapMatcher:
         # 4. First point in trajectory (Initialization)
         if len(self.history_states) == 0:
             best_cand = max(current_candidates, key=lambda c: c["emit_p"])
-            self.history_states.append({"candidates": current_candidates, "viterbi": {id(c): np.log(max(1e-12, c["emit_p"])) for c in current_candidates}, "raw": pt})
+            init_v = {id(c): np.log(max(1e-12, c["emit_p"])) for c in current_candidates}
+            if len(init_v) > 0:
+                max_v = max(init_v.values())
+                for k in init_v:
+                    init_v[k] -= max_v
+            self.history_states.append({"candidates": current_candidates, "viterbi": init_v, "raw": pt})
             self.last_pos_enu = raw_pos_enu
             self.last_matched_seg = best_cand["seg"]
 
@@ -253,6 +258,12 @@ class HMMMapMatcher:
                 confidence=0.0,
                 fallback_reason="TOPOLOGICAL_DISCONTINUITY"
             )
+
+
+        # Normalize viterbi to prevent underflow
+        max_v = max(curr_viterbi.values())
+        for k in curr_viterbi:
+            curr_viterbi[k] -= max_v
 
         # Save history
         self.history_states.append({
