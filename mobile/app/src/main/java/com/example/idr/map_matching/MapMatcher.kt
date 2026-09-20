@@ -286,9 +286,11 @@ class HMMMapMatcher(
         // 4. First step
         if (historyStates.isEmpty()) {
             val bestCand = currentCandidates.maxByOrNull { it.emitP }!!
-            val viterbiMap = currentCandidates.mapIndexed { idx, c ->
+            val rawViterbi = currentCandidates.mapIndexed { idx, c ->
                 idx to ln(max(1e-12, c.emitP))
             }.toMap()
+            val maxInitV = rawViterbi.values.maxOrNull() ?: 0.0
+            val viterbiMap = rawViterbi.mapValues { it.value - maxInitV }
 
             historyStates.add(
                 HistoryStep(
@@ -361,10 +363,14 @@ class HMMMapMatcher(
             )
         }
 
+        // Normalize viterbi log-probabilities to prevent underflow over long trajectories
+        val maxCurrV = currViterbi.values.maxOrNull() ?: 0.0
+        val normalizedViterbi = currViterbi.mapValues { it.value - maxCurrV }
+
         historyStates.add(
             HistoryStep(
                 candidates = currentCandidates,
-                viterbi = currViterbi,
+                viterbi = normalizedViterbi,
                 raw = pt
             )
         )
