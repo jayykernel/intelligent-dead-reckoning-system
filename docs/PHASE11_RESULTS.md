@@ -85,3 +85,5 @@ The 20-second simulated scenario dynamically verifies the state machine defined 
 3. **Red (PURE_DEAD_RECKONING)**: Trust falls below 0.2 threshold. Full loss of signal. Covariance ellipse trace grows monotonically via INS strapdown integration and scaled AI noise variance. *(Reference image: Outage_DeadReckoning_Red.png)*
 4. **Purple (NIS-FAIL / Rejected)**: Upon GNSS reacquisition, if innovation fails the strict $\chi^2$ threshold, the update is rejected to prevent trajectory snapping. Known cases (e.g., 398.57m x 52.45m highly-skewed ellipses) precisely demonstrate heading-drift asymmetric growth during long outages! *(Reference image: NIS_Rejected_Purple.png)*
 
+All four color modes (Green, Amber, Red, Purple) have been visually confirmed on Android emulator via Logcat triggers and screenshots, satisfying the Phase 11 exit criteria.
+
