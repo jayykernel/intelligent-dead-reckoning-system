@@ -149,9 +149,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 12 — Edge Engine Packaging
-- [ ] `/edge` wraps `/engine` with FOG-appropriate correction model (N7)
-- [ ] Fixed-frame calibration (no phone-mount assumptions)
-- [ ] Output interface for downstream integration (no UI)
+- [x] `/edge` wraps `/engine` with FOG-appropriate correction model (N7)
+- [x] Fixed-frame calibration (no phone-mount assumptions)
+- [x] Output interface for downstream integration (no UI)
 - **Exit criteria**: runs against a FOG-rate (or simulated ~200Hz) synthetic
   or available dataset, meets update-rate target in `docs/BENCHMARKS.md`.
 
