@@ -8,9 +8,10 @@
     <color name="teal_700">#FF018786</color>
     <color name="white">#FFFFFFFF</color>
     <string name="app_name">IDR Navigation</string>
-    <style name="Theme.IDR" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.IDR" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/purple_500</item>
         <item name="colorPrimaryVariant">@color/purple_700</item>
         <item name="colorOnPrimary">@color/white</item>
+        <item name="android:windowBackground">@android:color/white</item>
     </style>
 </resources>

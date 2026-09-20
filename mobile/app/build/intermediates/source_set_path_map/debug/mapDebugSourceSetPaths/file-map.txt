@@ -26,11 +26,11 @@ com.example.idr.app-material-1.11.0-24 C:\Users\JAYANITHYAN M R\.gradle\caches\8
 com.example.idr.app-constraintlayout-2.1.4-25 C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\f40243e2e7270103a1321616401318ae\transformed\constraintlayout-2.1.4\res
 com.example.idr.app-lifecycle-viewmodel-savedstate-2.6.1-26 C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\f659234b35e3d30456eb60d9a3b14c94\transformed\lifecycle-viewmodel-savedstate-2.6.1\res
 com.example.idr.app-lifecycle-livedata-core-2.6.1-27 C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\fafc846afedf5978e188bc251c3cf35c\transformed\lifecycle-livedata-core-2.6.1\res
-com.example.idr.app-pngs-28 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\generated\res\pngs\debug
-com.example.idr.app-resValues-29 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\generated\res\resValues\debug
-com.example.idr.app-updated_navigation_xml-30 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\generated\updated_navigation_xml\debug
-com.example.idr.app-packageDebugResources-31 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.example.idr.app-packageDebugResources-32 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.example.idr.app-debug-33 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\build\intermediates\merged_res\debug\mergeDebugResources
-com.example.idr.app-debug-34 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\src\debug\res
-com.example.idr.app-main-35 C:\Users\JAYANITHYAN M R\OneDrive\Documents\dead reckoning proto\mobile\app\src\main\res
+com.example.idr.app-pngs-28 C:\dev\dead reckoning proto\mobile\app\build\generated\res\pngs\debug
+com.example.idr.app-resValues-29 C:\dev\dead reckoning proto\mobile\app\build\generated\res\resValues\debug
+com.example.idr.app-updated_navigation_xml-30 C:\dev\dead reckoning proto\mobile\app\build\generated\updated_navigation_xml\debug
+com.example.idr.app-packageDebugResources-31 C:\dev\dead reckoning proto\mobile\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.idr.app-packageDebugResources-32 C:\dev\dead reckoning proto\mobile\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.idr.app-debug-33 C:\dev\dead reckoning proto\mobile\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.example.idr.app-debug-34 C:\dev\dead reckoning proto\mobile\app\src\debug\res
+com.example.idr.app-main-35 C:\dev\dead reckoning proto\mobile\app\src\main\res

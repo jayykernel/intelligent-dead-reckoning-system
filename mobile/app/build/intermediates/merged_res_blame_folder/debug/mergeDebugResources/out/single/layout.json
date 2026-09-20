@@ -1,5 +1,9 @@
 [
     {
+        "merged": "C:\\Users\\JAYANITHYAN M R\\.gradle\\daemon\\8.13\\com.example.idr.app-mergeDebugResources-31:\\layout\\activity_main.xml",
+        "source": "C:\\Users\\JAYANITHYAN M R\\.gradle\\daemon\\8.13\\com.example.idr.app-main-34:\\layout\\activity_main.xml"
+    },
+    {
         "merged": "com.example.idr.app-mergeDebugResources-31:/layout/activity_main.xml",
         "source": "com.example.idr.app-main-34:/layout/activity_main.xml"
     }

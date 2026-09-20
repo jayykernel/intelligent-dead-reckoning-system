@@ -52,8 +52,8 @@ def generate_synthetic_fog_dataset(
 
     lat0 = data['gt_lat'][0]
     lon0 = data['gt_lon'][0]
-    alt0 = data['gt_alt'][0]
-    e_gt, n_gt, u_gt = latlon_to_enu(data['gt_lat'], data['gt_lon'], data['gt_alt'], lat0, lon0, alt0)
+    alt0 = data['gt_alt'][0] / 1000.0
+    e_gt, n_gt, u_gt = latlon_to_enu(data['gt_lat'], data['gt_lon'], data['gt_alt'] / 1000.0, lat0, lon0, alt0)
     gps_pos_orig = np.column_stack([e_gt, n_gt, u_gt])
 
     # GT velocity from speed and heading (or diff)
@@ -72,13 +72,8 @@ def generate_synthetic_fog_dataset(
     calib.calibrate_from_session(acc_raw[:1200], gyro_raw[:1200], speed_nan_to_zero[:1200], dt=dt_orig)
     acc_orig, gyro_orig = calib.apply(acc_raw, gyro_raw)
 
-    # Re-apply gravity perfectly to the Vehicle-Frame acceleration
-    # so that the simulated fixed-frame FOG sensor sees gravity strictly along Z.
-    # calib.apply removes gravity bias if it finds it, we want pure 9.80665 mostly in +Z.
-    # Wait: accel in vehicle frame during stationary should be [0, 0, 9.80665].
-    # The CalibrationEngine computes gravity, but it subtracts out the overall stationary bias.
-    # We should add [0, 0, 9.80665] back to simulate what an aligned hardware sensor reads.
-    acc_orig += np.array([0.0, 0.0, 9.80665])
+    # calib.apply already ensures Vehicle Z has +9.80665 m/s^2 (specific force)
+    # when level and stationary, perfectly matching standard ENU gravity convention.
 
     # Target time vector at 200 Hz
     dt = 1.0 / target_freq
