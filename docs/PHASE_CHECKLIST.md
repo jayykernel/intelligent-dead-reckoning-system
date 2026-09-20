@@ -158,11 +158,11 @@ execution protocol and commit convention.
 ---
 
 ### Phase 13 — Full Benchmark Validation
-- [ ] Dead reckoning drift % measured against official + stretch targets
+- [x] Dead reckoning drift % measured against official + stretch targets
   (`docs/BENCHMARKS.md`)
-- [ ] Fusion update rate measured (mobile 10Hz, edge ~200Hz)
-- [ ] Mode-transition latency re-verified end to end
-- [ ] All results written to `/eval` with plots, not just numbers
+- [x] Fusion update rate measured (mobile 10Hz, edge ~200Hz)
+- [x] Mode-transition latency re-verified end to end
+- [x] All results written to `/eval` with plots, not just numbers
 - **Exit criteria**: official benchmarks met at minimum, stretch target result
   reported honestly (pass or not) — no rounding up, no cherry-picked runs.
 
