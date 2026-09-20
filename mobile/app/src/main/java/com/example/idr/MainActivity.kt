@@ -38,12 +38,13 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "Playback stepping: epoch=$simEpoch, time=$simTime")
             }
 
-            // Multi-phase test drive loop:
-            // 0..60 (0-6s): Good GNSS (Open sky)
-            // 60..90 (6-9s): Signal degradation (Approaching tunnel)
-            // 90..180 (9-18s): Total GNSS outage (Inside tunnel)
-            // 180..240 (18-24s): GNSS reacquisition (Exiting tunnel)
-            val cycleEpoch = simEpoch % 240
+            // Multi-phase test drive loop (26.0s total cycle):
+            // 0..60 (0-6s): Good GNSS (Open sky, GREEN)
+            // 60..110 (6-11s): Continuous signal degradation approaching tunnel (AMBER)
+            // 110..190 (11-19s): Total GNSS outage inside tunnel (RED)
+            // 190..230 (19-23s): GNSS reacquisition / NIS rejection exiting tunnel (PURPLE & AMBER)
+            // 230..260 (23-26s): Re-converged steady-state navigation (GREEN)
+            val cycleEpoch = simEpoch % 260
 
             val (gnssPos, gnssVel, isGnssAvail, cn0, sats, accM) = when {
                 cycleEpoch < 60 -> {
@@ -51,13 +52,29 @@ class MainActivity : AppCompatActivity() {
                     val vel = doubleArrayOf(10.0, 0.0, 0.0)
                     SimData(pos, vel, true, 38.0, 16, 2.0)
                 }
-                cycleEpoch < 90 -> {
+                cycleEpoch < 110 -> {
+                    // Continuous linear degradation ramp over 5.0s (50 epochs)
+                    val progress = (cycleEpoch - 60) / 50.0
                     val pos = doubleArrayOf(10.0 * simTime, 0.0, 0.0)
                     val vel = doubleArrayOf(10.0, 0.0, 0.0)
-                    SimData(pos, vel, true, 16.0, 4, 22.0)
+                    val currCn0 = 38.0 - progress * (38.0 - 15.0)
+                    val currSats = (16.0 - progress * (16.0 - 3.0)).toInt()
+                    val currAccM = 2.0 + progress * (25.0 - 2.0)
+                    SimData(pos, vel, true, currCn0, currSats, currAccM)
                 }
-                cycleEpoch < 180 -> {
+                cycleEpoch < 190 -> {
+                    // Total GNSS blackout in tunnel
                     SimData(null, null, false, 0.0, 0, 99.0)
+                }
+                cycleEpoch < 230 -> {
+                    // GNSS signal reappears upon tunnel exit, recovering over 4.0s (40 epochs)
+                    val reacqProgress = (cycleEpoch - 190) / 40.0
+                    val pos = doubleArrayOf(10.0 * simTime, 0.0, 0.0)
+                    val vel = doubleArrayOf(10.0, 0.0, 0.0)
+                    val currCn0 = 20.0 + reacqProgress * (38.0 - 20.0)
+                    val currSats = (4.0 + reacqProgress * (16.0 - 4.0)).toInt()
+                    val currAccM = 22.0 - reacqProgress * (22.0 - 2.0)
+                    SimData(pos, vel, true, currCn0, currSats, currAccM)
                 }
                 else -> {
                     val pos = doubleArrayOf(10.0 * simTime, 0.0, 0.0)
@@ -83,6 +100,11 @@ class MainActivity : AppCompatActivity() {
             val trust = (result["trust_score"] as Double).toFloat()
             val heading = (result["heading"] as Double).toFloat()
             val gnssPassed = result["gnss_passed"] as Boolean
+
+            // Amber state logging: log when trust is in the degrading band (0.2 - 0.8)
+            if (trust >= 0.2f && trust <= 0.8f) {
+                Log.d(TAG, ">>> AMBER STATE ACTIVE: Trust=$trust, Mode=$mode <<<")
+            }
 
             updateNavigationState(
                 pEE = cov2d[0],
