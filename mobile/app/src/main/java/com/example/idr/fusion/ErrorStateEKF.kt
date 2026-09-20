@@ -390,6 +390,34 @@ class ErrorStateEKF(
         return update(z, hX, H, RCov, updateType = "ZUPT")
     }
 
+    fun updateMapMatchingPosition(
+        pMmEnu: DoubleArray,
+        sigmaPos: Double = 3.0
+    ): Triple<Boolean, Double, Double> {
+        val H = SimpleMatrix(3, 15)
+        for (i in 0..2) H.set(i, i, 1.0)
+        val RCov = SimpleMatrix.identity(3).scale(sigmaPos * sigmaPos)
+        return update(pMmEnu, p, H, RCov, updateType = "MAP_POS")
+    }
+
+    fun updateMapMatchingHeading(
+        headingRad: Double,
+        sigmaHeading: Double = Math.toRadians(5.0),
+        source: String = "MAP_HEADING"
+    ): Triple<Boolean, Double, Double> {
+        val R = quatToRot(q)
+        val currentYaw = atan2(R.get(0, 1), R.get(1, 1))
+
+        val z = doubleArrayOf(headingRad)
+        val hX = doubleArrayOf(currentYaw)
+
+        val H = SimpleMatrix(1, 15)
+        H.set(0, 8, -1.0) // delta_theta_z
+
+        val RCov = SimpleMatrix(1, 1, true, sigmaHeading * sigmaHeading)
+        return update(z, hX, H, RCov, updateType = source)
+    }
+
     fun updateNhc(
         vehicleType: String = "car",
         leanAngleRad: Double = 0.0,

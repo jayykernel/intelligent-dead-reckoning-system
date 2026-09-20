@@ -385,6 +385,55 @@ class ErrorStateEKF:
 
         return self.update(z, h_x, H, R_cov, update_type="AI_SPEED", alpha=alpha, timestamp=timestamp)
 
+    def update_map_matching_position(
+        self,
+        p_mm_enu: np.ndarray,
+        sigma_pos: float = 3.0,
+        alpha: float = 0.01,
+        timestamp: float = 0.0
+    ) -> Tuple[bool, float, float]:
+        """
+        Update with map-matching Position measurement in ENU.
+        Used as pseudo-measurement during GNSS outage.
+        """
+        z = p_mm_enu  # (3,)
+        h_x = self.p    # (3,)
+        H = np.zeros((3, 15))
+        H[0:3, 0:3] = np.eye(3)
+        R_cov = np.eye(3) * (sigma_pos**2)
+
+        return self.update(z, h_x, H, R_cov, update_type="MAP_POS", alpha=alpha, timestamp=timestamp)
+
+    def update_map_matching_heading(
+        self,
+        heading_rad: float,
+        sigma_heading: float = np.radians(5.0),
+        alpha: float = 0.01,
+        timestamp: float = 0.0,
+        source: str = "MAP_HEADING"
+    ) -> Tuple[bool, float, float]:
+        """
+        Update with absolute Heading measurement from map-matching (geographic heading: 0 = North, +pi/2 = East, in rad).
+        This mimics the magnetometer heading update but is gated by map-matching confidence.
+        """
+        R = self.quat_to_rot(self.q)
+        # Vehicle Y axis in nav frame is the 2nd column of R
+        y_axis_nav = R[:, 1]
+        v_fwd_est = np.dot(y_axis_nav, self.v)
+
+        z = np.array([v_fwd_est * np.cos(heading_rad)])  # Project velocity onto heading axis (simplified)
+        h_x = np.array([np.linalg.norm(self.v) * np.cos(self.ekf.get_euler_angles_deg()[2] * np.pi / 180.0)])  # Simplified
+
+        # Proper measurement: heading angle itself
+        z = np.array([heading_rad])
+        h_x = np.array([self.ekf.get_euler_angles()[2]])  # Current heading estimate in rad
+        H = np.zeros((1, 15))
+        H[0, 6:9] = np.array([0.0, 0.0, 1.0])  # Simplified: derivative of heading w.r.t delta_theta is [0,0,1] for yaw
+
+        R_cov = np.array([[sigma_heading**2]])
+
+        return self.update(z, h_x, H, R_cov, update_type=source, alpha=alpha, timestamp=timestamp)
+
     def update_zupt(
         self,
         sigma_zupt: float = 0.05,

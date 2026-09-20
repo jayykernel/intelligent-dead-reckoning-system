@@ -27,6 +27,15 @@ class FusionEngine(
     // Modules placeholders for TFLite (Phase 11: integrate later)
     var classifier: Any? = null
     var mapMatcher: HMMMapMatcher? = null
+    private var roadNetwork: RoadNetwork? = null
+
+    init {
+        // Initialize road network and map matcher (will be populated with real OSM data in practice)
+        // For now, we'll initialize with empty network - in production this would load from OSM extract
+        // This mirrors the initialization pattern in Android MapMatcher usage
+        roadNetwork = RoadNetwork(lat0 = 0.0, lon0 = 0.0)
+        mapMatcher = HMMMapMatcher(roadNetwork!!, vehicleType = "car")
+    }
 
     var currentVehicleType = "car"
     var currentLeanAngleRad = 0.0
@@ -125,6 +134,42 @@ class FusionEngine(
                 atan2(siny_cosp, cosy_cosp) * 180.0 / PI
             }
             else -> 0.0
+        }
+
+        // 7. Map-Matching Active Correction (during outages)
+        if (modeCurrentState == "PURE_DEAD_RECKONING" && mapMatcher != null && roadNetwork != null) {
+            val currentPos = ekf.p
+            val currentHeadingDeg = when {
+                ekf.q.size == 4 -> {
+                    val q = ekf.q
+                    val siny_cosp = 2.0 * (q[3] * q[2] + q[0] * q[1])
+                    val cosy_cosp = 1.0 - 2.0 * (q[1] * q[1] + q[2] * q[2])
+                    atan2(siny_cosp, cosy_cosp) * 180.0 / PI
+                }
+                else -> 0.0
+            }
+
+            val mapMatchResult = mapMatcher!!.matchPoint(
+                rawPosEnu = doubleArrayOf(currentPos[0], currentPos[1], currentPos[2]),
+                headingDeg = currentHeadingDeg
+            )
+
+            if (mapMatchResult.snapped) {
+                // Apply map-matching position update as pseudo-measurement
+                val snappedPos = doubleArrayOf(
+                    mapMatchResult.snappedPos[0],
+                    mapMatchResult.snappedPos[1],
+                    currentPos[2]  // Keep current altitude
+                )
+                ekf.updateMapMatchingPosition(snappedPos, sigmaPos = 2.0)
+
+                // Apply map-matching heading update if we have a matched segment
+                val matchedSeg = mapMatcher!!.last_matched_seg
+                if (matchedSeg != null) {
+                    val roadHeadingRad = matchedSeg.bearing_deg * Math.PI / 180.0
+                    ekf.updateMapMatchingHeading(roadHeadingRad, sigmaHeading = Math.toRadians(5.0), source = "MAP_HEADING")
+                }
+            }
         }
 
         // Compute overall GNSS pass status: if we have input, we require it to have passed
