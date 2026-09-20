@@ -16,12 +16,12 @@ Evaluated on a 60s GNSS-denied segment of the synthetic S1 FOG dataset:
 
 | Sensor Path | Environment | Drift % (60s Outage) |
 | :--- | :--- | :--- |
-| **Edge Engine (FOG)** | Synthetic | 1,568.44% |
-| **MEMS Baseline (S1)** | Raw IO-VNBD | 78,711.00%* |
+| **Edge Engine (FOG)** | Synthetic (Rigid Mount, No AI) | 1,568.44% |
+| **MEMS Baseline (S1)** | Raw IO-VNBD (Phone Mount, AI Core) | 8,688.07%* |
 
-*\*Note: Baseline number derived from Phase 6 S1 reference.*
+*\*Note: Baseline number derived from the final Phase 6 S1 reference ($k=100$ dynamic covariance scaling).*
 
-The Edge FOG-path demonstrates a massive relative reduction in drift compared to the MEMS baseline due to ultra-low noise parameters; however, the absolute drift remains high due to the fundamental heading-observability gap documented in Phase 6.
+The Edge FOG-path demonstrates a massive relative reduction in drift compared to the MEMS baseline. **Crucially, this comparison evaluates the two production-ready configurations against each other: the FOG path's classical-only pipeline (no AI correction, per N7's design) versus the MEMS path's full pipeline (including continuous AI speed correction).** It is not purely an isolated sensor-noise comparison, but rather a system-level validation showing that low noise out-performs AI-corrected high noise. However, the absolute drift remains high due to the fundamental heading-observability gap documented in Phase 6.
 
 ## Phase 12 Checklist Coverage
 - [x] `/edge` wraps `/engine` with FOG-appropriate correction model (N7)
