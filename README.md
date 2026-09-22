@@ -63,4 +63,4 @@ See [CLAUDE.md](CLAUDE.md) for the project constitution: non-negotiable rules, e
 
 ## License
 
-Proprietary — SIH competition entry.
+Proprietary — SIH entry.
