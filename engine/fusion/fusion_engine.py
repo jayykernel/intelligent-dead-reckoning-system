@@ -241,6 +241,13 @@ class GNSSINSFusionEngine:
                 alpha=0.01,
                 timestamp=timestamp
             )
+            # Re-estimate / re-zero gyro bias during zero-velocity stop (ZARU)
+            self.ekf.update_zero_angular_rate(
+                gyro_veh=gyro_veh,
+                sigma_gyro_bias=0.01,
+                alpha=0.01,
+                timestamp=timestamp
+            )
         else:
             # Moving vehicle: continuous NHC (lateral and vertical constraints, lean-compensated for two-wheelers)
             self.ekf.update_nhc(

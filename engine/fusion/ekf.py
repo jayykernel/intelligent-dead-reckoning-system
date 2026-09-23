@@ -445,6 +445,28 @@ class ErrorStateEKF:
 
         return self.update(z, h_x, H, R_cov, update_type="ZUPT", alpha=alpha, timestamp=timestamp)
 
+    def update_zero_angular_rate(
+        self,
+        gyro_veh: np.ndarray,
+        sigma_gyro_bias: float = 0.005,
+        alpha: float = 0.01,
+        timestamp: float = 0.0
+    ) -> Tuple[bool, float, float]:
+        """
+        Zero Angular Rate Update (ZARU) when vehicle is stationary.
+        Enforces gyro bias estimation when true angular rate is zero.
+        z = gyro_veh
+        h(x) = b_g
+        H = [0_{3x12}, I_{3x3}]
+        """
+        z = np.copy(gyro_veh)
+        h_x = np.copy(self.b_g)
+        H = np.zeros((3, 15))
+        H[0:3, 12:15] = np.eye(3)
+        R_cov = np.eye(3) * (sigma_gyro_bias**2)
+
+        return self.update(z, h_x, H, R_cov, update_type="ZARU", alpha=alpha, timestamp=timestamp)
+
     def update_nhc(
         self,
         vehicle_type: str = "car",

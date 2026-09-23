@@ -94,6 +94,13 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 alpha=0.01,
                 timestamp=timestamp
             )
+            # Re-estimate gyro bias when stationary
+            self.ekf.update_zero_angular_rate(
+                gyro_veh=gyro_veh,
+                sigma_gyro_bias=0.01,
+                alpha=0.01,
+                timestamp=timestamp
+            )
         else:
             self.ekf.update_nhc(
                 vehicle_type=self.current_vehicle_type,
@@ -152,17 +159,17 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             if map_match_result.snapped:
                 # Apply map-matching position update as pseudo-measurement
                 snapped_pos = np.array([
-                    map_match_result.snappedPos[0],
-                    map_match_result.snappedPos[1],
+                    map_match_result.snapped_pos[0],
+                    map_match_result.snapped_pos[1],
                     current_pos[2]  # Keep current altitude
                 ])
-                self.ekf.update_map_matching_position(snapped_pos, sigmaPos=2.0)
+                self.ekf.update_map_matching_position(snapped_pos, sigma_pos=2.0)
 
                 # Apply map-matching heading update if we have a matched segment
                 matchedSeg = self.map_matcher.last_matched_seg
                 if matchedSeg is not None:
                     roadHeadingRad = matchedSeg.bearing_deg * np.pi / 180.0
-                    self.ekf.update_map_matchingHeading(roadHeadingRad, sigmaHeading=np.radians(5.0), source="MAP_HEADING")
+                    self.ekf.update_map_matching_heading(roadHeadingRad, sigma_heading=np.radians(5.0), source="MAP_HEADING")
 
         if self.mode_current_state == "GNSS_AIDED" and is_gnss_available and gnss_pos_enu is not None:
             dynamic_sigma_pos = 5.0 / max(0.1, np.sqrt(trust_score))
