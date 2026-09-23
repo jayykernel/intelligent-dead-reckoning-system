@@ -342,7 +342,7 @@ def evaluate_edge_fog_session():
     """
     Evaluates Edge Engine on synthetic FOG 200Hz dataset.
     """
-    dataset_path = "data/synthetic_fog/s1_synthetic_fog_200hz.npz"
+    dataset_path = "data/processed/s1_synthetic_fog_200hz.npz"
     print(f"\n--- Evaluating EDGE ENGINE (Synthetic FOG 200Hz): S1 ---")
     data = np.load(dataset_path)
     timestamps = data["time"]
@@ -816,8 +816,8 @@ def main():
 
 | Transition Scenario | State Machine Flag-Flip Latency | Covariance Settling Latency | State Vector Continuity (Delta p / v) | Benchmark Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Outage Entry** (GNSS_AIDED $\to$ PURE_DEAD_RECKONING) | **0.1 s** (1 epoch, dwell-limited) | **3.1 s** (smooth 5x expansion) | $< 1.0 \text{ m} / 0.0002 \text{ m/s}$ | **PASS** |
-| **Reacquisition (Short Outage)** | **0.1 s** (1 epoch, dwell-limited) | **1.2 s** (rapid contraction) | $< 1.0 \text{ m} / 0.02 \text{ m/s}$ | **PASS** |
+| **Outage Entry** (GNSS_AIDED $\to$ PURE_DEAD_RECKONING) | **0.1 s** (1 epoch, dwell-limited) | **3.1 s** (smooth 5x expansion) | $< 1.0 \text{{ m}} / 0.0002 \text{{ m/s}}$ | **PASS** |
+| **Reacquisition (Short Outage)** | **0.1 s** (1 epoch, dwell-limited) | **1.2 s** (rapid contraction) | $< 1.0 \text{{ m}} / 0.02 \text{{ m/s}}$ | **PASS** |
 | **Reacquisition (Long Outage)** | **0.1 s** | Intentional Rejection (NIS gating prevents state corruption) | Drift-correcting step | **PASS** |
 
 ---
