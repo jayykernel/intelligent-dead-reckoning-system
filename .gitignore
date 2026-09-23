@@ -1,0 +1,5 @@
+mobile/.idea/
+mobile/app/build/
+mobile/.gradle/
+__pycache__/
+*.pyc

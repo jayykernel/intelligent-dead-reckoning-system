@@ -36,6 +36,10 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
     def __init__(self, k=100.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.k = k
+        # Initialize road network and map matcher
+        from engine.map_matching import RoadNetwork, HMMMapMatcher
+        self.road_network = RoadNetwork(lat0=0.0, lon0=0.0)
+        self.map_matcher = HMMMapMatcher(self.road_network, vehicle_type="car")
 
     def step(self,
              acc_raw: np.ndarray,
@@ -134,6 +138,31 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 self.mode_time_in_state = 0.0
 
         mode = self.mode_current_state
+
+        # 9. Map-Matching Active Correction (during outages)
+        if self.mode_current_state == "PURE_DEAD_RECKONING" and self.map_matcher is not None and self.road_network is not None:
+            current_pos = self.ekf.p
+            current_heading_deg = self.ekf.get_euler_angles_deg()[2]  # yaw in degrees
+
+            map_match_result = self.map_matcher.match_point(
+                raw_pos_enu=np.array([current_pos[0], current_pos[1], current_pos[2]]),
+                heading_deg=current_heading_deg
+            )
+
+            if map_match_result.snapped:
+                # Apply map-matching position update as pseudo-measurement
+                snapped_pos = np.array([
+                    map_match_result.snappedPos[0],
+                    map_match_result.snappedPos[1],
+                    current_pos[2]  # Keep current altitude
+                ])
+                self.ekf.update_map_matching_position(snapped_pos, sigmaPos=2.0)
+
+                # Apply map-matching heading update if we have a matched segment
+                matchedSeg = self.map_matcher.last_matched_seg
+                if matchedSeg is not None:
+                    roadHeadingRad = matchedSeg.bearing_deg * np.pi / 180.0
+                    self.ekf.update_map_matchingHeading(roadHeadingRad, sigmaHeading=np.radians(5.0), source="MAP_HEADING")
 
         if self.mode_current_state == "GNSS_AIDED" and is_gnss_available and gnss_pos_enu is not None:
             dynamic_sigma_pos = 5.0 / max(0.1, np.sqrt(trust_score))
@@ -751,8 +780,8 @@ def main():
     report_md = r"""# Full Benchmark Validation Report (Phase 13)
 
 ## 1. Dead Reckoning Drift Performance (60s GNSS Blackout)
-**Official Benchmark Target**: $< 10.0\%$ of total distance travelled during GNSS outage.
-**Team Stretch Target**: $1.0 - 2.0\%$ drift.
+**Official Benchmark Target**: ${{ < 10.0\% }}$ of total distance travelled during GNSS outage.
+**Team Stretch Target**: ${{ 1.0 - 2.0\% }}$ drift.
 
 | Session ID | Vehicle Category | Data Source / Platform | Outage Dist (m) | Final Error (m) | Drift % | Official Target (<=10%) | Stretch Target (1-2%) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
