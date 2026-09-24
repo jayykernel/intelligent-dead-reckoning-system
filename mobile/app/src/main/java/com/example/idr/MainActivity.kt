@@ -23,17 +23,16 @@ import java.io.File
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        // High-performance OpenStreetMap raster basemap powered by CARTO CDN (Compliant with OSM usage policy)
-        val OSM_VOYAGER: ITileSource = XYTileSource(
-            "CartoVoyager",
+        // High-availability OpenStreetMap tile server that doesn't inject watermarks or require commercial API keys
+        val OSM_FRANCE: ITileSource = XYTileSource(
+            "OSM_France",
             0, 20, 256, ".png",
             arrayOf(
-                "https://a.basemaps.cartocdn.com/rastertiles/voyager/",
-                "https://b.basemaps.cartocdn.com/rastertiles/voyager/",
-                "https://c.basemaps.cartocdn.com/rastertiles/voyager/",
-                "https://d.basemaps.cartocdn.com/rastertiles/voyager/"
+                "https://a.tile.openstreetmap.fr/osmfr/",
+                "https://b.tile.openstreetmap.fr/osmfr/",
+                "https://c.tile.openstreetmap.fr/osmfr/"
             ),
-            "© OpenStreetMap contributors, © CARTO"
+            "© OpenStreetMap contributors, OpenStreetMap France"
         )
     }
 
@@ -129,8 +128,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         mapView = findViewById(R.id.mapView)
-        // Set compliant map tile source
-        mapView.setTileSource(OSM_VOYAGER)
+        // Set OpenStreetMap France tiles (Completely free, no watermark, no API key needed)
+        mapView.setTileSource(OSM_FRANCE)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(16.0)
         mapView.overlays.add(trajectoryTrail)
