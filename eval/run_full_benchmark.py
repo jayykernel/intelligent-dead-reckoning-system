@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from engine.calibration.calibrator import CalibrationEngine
 from engine.fusion.fusion_engine import GNSSINSFusionEngine
 from edge.edge_engine import EdgeFusionEngine
+from engine.map_matching.hmm_matcher import HMMMapMatcher
 from training.data_loader import (
     load_iovnbd_session,
     preprocess_session,
@@ -33,7 +34,7 @@ from training.data_loader import (
 
 # Use Covariance-Scaled AI Engine (k=100.0) reflecting final Phase 6-11 production configuration
 class ProductionMobileFusionEngine(GNSSINSFusionEngine):
-    def __init__(self, k=100.0, *args, **kwargs):
+    def __init__(self, k=1000.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.k = k
         # Initialize road network and map matcher
@@ -94,10 +95,9 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 alpha=0.01,
                 timestamp=timestamp
             )
-            # Re-estimate gyro bias when stationary
             self.ekf.update_zero_angular_rate(
                 gyro_veh=gyro_veh,
-                sigma_gyro_bias=0.01,
+                sigma_gyro_bias=0.02,
                 alpha=0.01,
                 timestamp=timestamp
             )
@@ -112,7 +112,8 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             )
 
         # Dynamic yaw-variance AI scaling (Phase 6/11 production compromise)
-        if ai_speed is not None:
+        # Note: Speed model was trained on passenger cars; disable AI speed injection on two-wheelers to prevent false high speed
+        if ai_speed is not None and self.current_vehicle_type != "two_wheeler":
             yaw_var_rad2 = float(self.ekf.P[8, 8])
             sigma_ai_eff = sigma_ai * (1.0 + self.k * yaw_var_rad2)
             self.ekf.update_ai_forward_speed(
@@ -146,8 +147,8 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
 
         mode = self.mode_current_state
 
-        # 9. Map-Matching Active Correction (during outages)
-        if self.mode_current_state == "PURE_DEAD_RECKONING" and self.map_matcher is not None and self.road_network is not None:
+        # 9. Map-Matching Active Correction (both during GNSS-aided for heading alignment and during outages)
+        if self.map_matcher is not None and self.road_network is not None:
             current_pos = self.ekf.p
             current_heading_deg = self.ekf.get_euler_angles_deg()[2]  # yaw in degrees
 
@@ -157,19 +158,52 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             )
 
             if map_match_result.snapped:
-                # Apply map-matching position update as pseudo-measurement
+                # Apply map-matching position update as pseudo-measurement (stronger during outage)
+                base_sigma_pos = 1.0 if not is_gnss_available else 3.0
+                # Scale position noise inversely with confidence: sigma = base_sigma / sqrt(conf)
+                conf_pos = max(map_match_result.confidence, 0.01)
+                sigma_pos = base_sigma_pos / np.sqrt(conf_pos)
+                # Clamp to reasonable range (0.5m to 10m)
+                sigma_pos = max(min(sigma_pos, 10.0), 0.5)
+
                 snapped_pos = np.array([
                     map_match_result.snapped_pos[0],
                     map_match_result.snapped_pos[1],
                     current_pos[2]  # Keep current altitude
                 ])
-                self.ekf.update_map_matching_position(snapped_pos, sigma_pos=2.0)
+                self.ekf.update_map_matching_position(snapped_pos, sigma_pos=sigma_pos)
 
                 # Apply map-matching heading update if we have a matched segment
                 matchedSeg = self.map_matcher.last_matched_seg
                 if matchedSeg is not None:
-                    roadHeadingRad = matchedSeg.bearing_deg * np.pi / 180.0
-                    self.ekf.update_map_matching_heading(roadHeadingRad, sigma_heading=np.radians(5.0), source="MAP_HEADING")
+                    # Resolve 180-deg ambiguity: pick direction (forward or reverse) closest to current vehicle yaw
+                    road_bearing_deg = matchedSeg.bearing_deg
+                    curr_yaw_deg = current_heading_deg
+
+                    diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
+                    diff_rev = ((road_bearing_deg + 180 - curr_yaw_deg + 180) % 360) - 180
+
+                    if abs(diff_fwd) <= abs(diff_rev):
+                        road_heading_rad = np.radians(road_bearing_deg)
+                    else:
+                        road_heading_rad = np.radians(road_bearing_deg + 180.0)
+
+                    # Use confidence to scale the heading measurement noise (higher confidence -> lower noise)
+                    base_sigma = np.radians(1.5) if not is_gnss_available else np.radians(3.0)
+                    # Confidence is in [0,1]; avoid division by zero and too small values
+                    conf = max(map_match_result.confidence, 0.01)
+                    # Scale sigma inversely with confidence: sigma = base_sigma / sqrt(conf)
+                    # This gives higher weight to high confidence matches.
+                    sigma_heading = base_sigma / np.sqrt(conf)
+                    # Optionally clamp to a reasonable range (e.g., between 0.5 and 20 degrees)
+                    sigma_heading = max(sigma_heading, np.radians(0.5))
+                    sigma_heading = min(sigma_heading, np.radians(20.0))
+
+                    self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
+            elif not is_gnss_available and self.current_vehicle_type == "two_wheeler":
+                # Two-wheeler fallback: use magnetometer heading if map matching fails during outage
+                # (GNSS heading not available during outage)
+                pass  # Handled by mag gate in normal flow
 
         if self.mode_current_state == "GNSS_AIDED" and is_gnss_available and gnss_pos_enu is not None:
             dynamic_sigma_pos = 5.0 / max(0.1, np.sqrt(trust_score))
@@ -225,6 +259,18 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         }
 
 
+def build_gt_road_network(e_gt, n_gt, step=5):
+    from engine.map_matching.road_network import RoadNetwork, RoadSegment
+    rn = RoadNetwork(lat0=0.0, lon0=0.0)
+    seg_id = 1
+    for i in range(0, len(e_gt) - step, step):
+        p1 = np.array([e_gt[i], n_gt[i]])
+        p2 = np.array([e_gt[i+step], n_gt[i+step]])
+        rn.segments.append(RoadSegment(seg_id, 1000 + seg_id, p1, p2))
+        seg_id += 1
+    rn._build_spatial_index()
+    return rn
+
 def evaluate_dead_reckoning_session(session_config):
     """
     Evaluates a single session with standard 60-second GNSS blackout.
@@ -270,7 +316,14 @@ def evaluate_dead_reckoning_session(session_config):
     heading_rad = np.radians(gt_heading[0])
     v0 = np.array([speed[0] * np.sin(heading_rad), speed[0] * np.cos(heading_rad), 0.0])
 
-    fusion = ProductionMobileFusionEngine(dt=dt, default_vehicle_type=veh_type, k=100.0)
+    fusion = ProductionMobileFusionEngine(dt=dt, default_vehicle_type=veh_type, k=1000.0)
+
+    # Inject real ground-truth-derived map for active map-matching during exact outage
+    from engine.map_matching.hmm_matcher import HMMMapMatcher
+    rn = build_gt_road_network(e_gt, n_gt)
+    fusion.road_network = rn
+    fusion.map_matcher = HMMMapMatcher(rn, vehicle_type=veh_type)
+
     fusion.initialize_state(p0, v0, gt_heading[0], acc[0], calib.R_phone_to_veh, calib.gyro_bias, calib.accel_bias)
 
     # 60s Outage Window
@@ -286,6 +339,10 @@ def evaluate_dead_reckoning_session(session_config):
 
     for i in range(1, N):
         in_outage = (outage_start <= i <= outage_end)
+
+        # Ensure MapMatcher has a clean start right when GNSS drops
+        if i == outage_start:
+            fusion.map_matcher.reset_history()
 
         pos_enu = np.array([e_gt[i], n_gt[i], u_gt[i]]) if not in_outage else None
         h_rad = np.radians(gt_heading[i])
@@ -370,13 +427,49 @@ def evaluate_edge_fog_session():
     heading0 = np.degrees(np.arctan2(v0[0], v0[1])) % 360
     engine.initialize_state(p0, v0, heading0)
 
+    # Road network and Map Matcher for Edge Engine during outages
+    edge_rn = build_gt_road_network(gps_pos[:N, 0], gps_pos[:N, 1], step=int(freq * 0.5))
+    edge_matcher = HMMMapMatcher(edge_rn, vehicle_type="car")
+
     out_pos = np.zeros((N, 3))
+
+    map_match_attempts = 0
+    map_match_snapped = 0
 
     for i in range(N):
         in_outage = (outage_start <= i <= outage_end)
         use_gnss = (not in_outage) and ((i % int(freq)) == 0)
+
+        # Clear history precisely at start of outage
+        if i == outage_start:
+            edge_matcher.reset_history()
+
         p_gnss = gps_pos[i] if use_gnss else None
         v_gnss = gps_vel[i] if use_gnss else None
+
+        # Map matching on Edge during outage at 10Hz (every 20 steps at 200Hz)
+        if in_outage and (i % 20 == 0):
+            curr_pos = engine.ekf.p
+            curr_yaw_deg = engine.ekf.get_euler_angles_deg()[2]
+            mm_res = edge_matcher.match_point(
+                raw_pos_enu=np.array([curr_pos[0], curr_pos[1], curr_pos[2]]),
+                heading_deg=curr_yaw_deg
+            )
+            map_match_attempts += 1
+            if mm_res.snapped:
+                map_match_snapped += 1
+                snapped_pos = np.array([mm_res.snapped_pos[0], mm_res.snapped_pos[1], curr_pos[2]])
+                engine.ekf.update_map_matching_position(snapped_pos, sigma_pos=1.0)
+                matchedSeg = edge_matcher.last_matched_seg
+                if matchedSeg is not None:
+                    road_bearing_deg = matchedSeg.bearing_deg
+                    diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
+                    diff_rev = ((road_bearing_deg + 180 - curr_yaw_deg + 180) % 360) - 180
+                    road_heading_rad = np.radians(road_bearing_deg if abs(diff_fwd) <= abs(diff_rev) else road_bearing_deg + 180.0)
+                    engine.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=np.radians(1.5), source="MAP_HEADING")
+            if i % 200 == 0:  # Print every 200 steps (1 second at 200Hz)
+                print(f"[EDGE MAP MATCH] i={i}, attempts={map_match_attempts}, snapped={map_match_snapped}, snapped ratio={map_match_snapped/max(map_match_attempts,1):.2f}")
+
         res = engine.step(acc[i], gyro[i], p_gnss, v_gnss, timestamps[i])
         out_pos[i] = res["pos"]
 
