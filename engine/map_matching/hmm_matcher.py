@@ -54,25 +54,31 @@ class HMMMapMatcher:
         """Configure HMM parameters based on vehicle profile."""
         if vehicle_type == "two_wheeler":
             # Two-Wheeler Profile: relaxed tolerances, higher agility, lane filtering
-            self.search_radius = 45.0          # Wider search radius (m)
-            self.sigma_z = 10.0                # Relaxed emission standard deviation (m)
-            self.beta = 8.0                    # Transition scale parameter (m)
+            self.search_radius = 150.0          # WIDER search radius (m) for two-wheelers
+            self.sigma_z = 20.0                # Relaxed emission standard deviation (m)
+            self.beta = 15.0                   # Transition scale parameter (m)
             self.heading_weight = 0.5          # Relaxed heading penalty
-            self.max_deviation_m = 50.0        # Max allowed cross-track distance before no-snap
-            self.min_confidence = 1e-4         # Minimum allowed emission confidence
+            self.max_deviation_m = 150.0       # Max allowed cross-track distance before no-snap
+            self.min_confidence = 1e-6         # Minimum allowed emission confidence
         else:
             # Car / Default Profile: standard road tracking
-            self.search_radius = 25.0          # Standard search radius (m)
-            self.sigma_z = 5.0                 # Standard emission std dev (m)
-            self.beta = 5.0                    # Standard transition scale (m)
-            self.heading_weight = 2.0          # Strict heading alignment
-            self.max_deviation_m = 25.0        # Strict cross-track threshold
-            self.min_confidence = 1e-3         # Minimum confidence
+            self.search_radius = 80.0          # Expanded search radius (m) for GNSS outages
+            self.sigma_z = 10.0                # Standard emission std dev (m)
+            self.beta = 10.0                   # Standard transition scale (m)
+            self.heading_weight = 1.0          # Strict heading alignment
+            self.max_deviation_m = 100.0       # Expanded cross-track threshold
+            self.min_confidence = 1e-5         # Minimum confidence
 
     def set_vehicle_type(self, vehicle_type: str):
         """Dynamically switch profile (e.g. from VehicleClassifier output)."""
         self.vehicle_type = vehicle_type
         self._configure_profile(vehicle_type)
+
+    def reset_history(self):
+        """Clear state history to allow fresh matching start."""
+        self.history_states = []
+        self.last_pos_enu = None
+        self.last_matched_seg = None
 
     def _emission_prob(
         self,
