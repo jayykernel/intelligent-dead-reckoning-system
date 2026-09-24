@@ -234,7 +234,7 @@ class ErrorStateEKF(
 
         // 1. Innovation vector
         val y = DoubleArray(m) { z[it] - hX[it] }
-        if (updateType == "MAG_HEADING" || updateType == "GNSS_HEADING") {
+        if (updateType == "MAG_HEADING" || updateType == "GNSS_HEADING" || updateType == "MAP_HEADING") {
             // Wrap angular innovation to [-pi, pi]
             y[0] = (y[0] + Math.PI) % (2 * Math.PI) - Math.PI
         }
@@ -388,6 +388,20 @@ class ErrorStateEKF(
         for (i in 0..2) H.set(i, 3 + i, 1.0)
         val RCov = SimpleMatrix.identity(3).scale(sigmaZupt * sigmaZupt)
         return update(z, hX, H, RCov, updateType = "ZUPT")
+    }
+
+    fun updateZeroAngularRate(
+        gyroVeh: DoubleArray,
+        sigmaGyroBias: Double = 0.005,
+        alpha: Double = 0.01,
+        timestamp: Double = 0.0
+    ): Triple<Boolean, Double, Double> {
+        val z = gyroVeh.copyOf()
+        val hX = bG.copyOf()
+        val H = SimpleMatrix(3, 15)
+        for (i in 0..2) H.set(i, 12 + i, 1.0)
+        val RCov = SimpleMatrix.identity(3).scale(sigmaGyroBias * sigmaGyroBias)
+        return update(z, hX, H, RCov, updateType = "ZARU")
     }
 
     fun updateMapMatchingPosition(
