@@ -191,7 +191,19 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:padding="10dp">
+            android:padding="8dp">
+
+            <!-- Toggle Live GPS vs Demo Mode -->
+            <Button
+                android:id="@+id/btnModeSwitch"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:text="Mode: Live GPS"
+                android:textSize="11sp"
+                android:backgroundTint="#1976D2"
+                android:textColor="#FFFFFF" />
 
             <!-- Toggle GNSS Outage Simulation Button -->
             <Button
@@ -199,9 +211,10 @@
                 android:layout_width="0dp"
                 android:layout_height="44dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="Simulate 60s Outage"
-                android:textSize="12sp"
+                android:layout_marginStart="2dp"
+                android:layout_marginEnd="4dp"
+                android:text="Simulate Outage"
+                android:textSize="11sp"
                 android:backgroundTint="#C62828"
                 android:textColor="#FFFFFF" />
 
@@ -211,9 +224,9 @@
                 android:layout_width="0dp"
                 android:layout_height="44dp"
                 android:layout_weight="0.8"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="2dp"
                 android:text="Recenter"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:backgroundTint="#37474F"
                 android:textColor="#FFFFFF" />
         </LinearLayout>
