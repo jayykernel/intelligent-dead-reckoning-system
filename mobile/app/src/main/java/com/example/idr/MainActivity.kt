@@ -107,7 +107,7 @@ class MainActivity : AppCompatActivity() {
 
         // 3. Comply with OpenStreetMap Tile Usage Policy (osm.wiki/Blocked)
         // MUST set unique user-agent after `load` overwrites it, and THEN save it so it works on next boot too.
-        config.userAgentValue = "IntelligentDeadReckoningApp/1.0 (Android; idr-contact@example.com) osmdroid"
+        config.userAgentValue = "IntelligentDeadReckoningApp/1.0 (+https://github.com/jayanithyan; contact: jayanithyan@example.com)"
         config.save(applicationContext, getPreferences(MODE_PRIVATE))
 
         setContentView(R.layout.activity_main)
