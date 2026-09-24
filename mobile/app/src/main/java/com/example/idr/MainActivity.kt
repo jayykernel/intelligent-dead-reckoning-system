@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
     private lateinit var locationManager: LocationManager
     private var accelSensor: Sensor? = null
     private var gyroSensor: Sensor? = null
+    private var rotVectorSensor: Sensor? = null
 
     // Operating Mode
     private var isLiveSensorMode = true // true = Real Phone GPS/IMU, false = Demo Loop
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
     private var isGpsFixAcquired = false
 
     // Trajectory Polyline
+    private var lastDrawnGeoPoint: GeoPoint? = null
     private val trajectoryTrail = Polyline().apply {
         outlinePaint.color = -16737536 // Bright Green Trail
         outlinePaint.strokeWidth = 6.0f
@@ -199,6 +201,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        rotVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
         // Request Location Permissions
         checkAndRequestPermissions()
@@ -293,6 +296,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         mapView.onResume()
         accelSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
         gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        rotVectorSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
 
     override fun onPause() {
@@ -323,6 +327,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                 latestGyroRaw[0] = event.values[0].toDouble()
                 latestGyroRaw[1] = event.values[1].toDouble()
                 latestGyroRaw[2] = event.values[2].toDouble()
+            }
+            Sensor.TYPE_ROTATION_VECTOR -> {
+                val qArray = FloatArray(4)
+                SensorManager.getQuaternionFromVector(qArray, event.values)
+                // SensorManager.getQuaternionFromVector returns [w, x, y, z]
+                val qAttitude = doubleArrayOf(
+                    qArray[0].toDouble(),
+                    qArray[1].toDouble(),
+                    qArray[2].toDouble(),
+                    qArray[3].toDouble()
+                )
+                fusionEngine.updateAttitudeFromSensors(qAttitude)
             }
         }
     }
@@ -470,9 +486,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         val lon = originLon + (p[0] / (111320.0 * cos(Deg2Rad(originLat))))
         val geoPoint = GeoPoint(lat, lon)
 
-        mapView.controller.setCenter(geoPoint)
-        trajectoryTrail.addPoint(geoPoint)
-        mapView.invalidate()
+        // Only move map or update trail if we moved significantly (e.g. > 1 meter)
+        val distMetres = if (lastDrawnGeoPoint != null) {
+            geoPoint.distanceToAsDouble(lastDrawnGeoPoint)
+        } else {
+            100.0
+        }
+
+        if (distMetres > 1.0) {
+            mapView.controller.setCenter(geoPoint)
+            trajectoryTrail.addPoint(geoPoint)
+            lastDrawnGeoPoint = geoPoint
+            mapView.invalidate()
+        }
     }
 
     private fun Deg2Rad(deg: Double) = deg * PI / 180.0
