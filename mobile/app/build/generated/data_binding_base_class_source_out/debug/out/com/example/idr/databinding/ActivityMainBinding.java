@@ -4,7 +4,8 @@ package com.example.idr.databinding;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
+import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -13,39 +14,85 @@ import androidx.viewbinding.ViewBinding;
 import androidx.viewbinding.ViewBindings;
 import com.example.idr.R;
 import com.example.idr.ui.ConfidenceEllipseView;
+import com.google.android.material.card.MaterialCardView;
 import java.lang.NullPointerException;
 import java.lang.Override;
 import java.lang.String;
+import org.osmdroid.views.MapView;
 
 public final class ActivityMainBinding implements ViewBinding {
   @NonNull
   private final ConstraintLayout rootView;
 
   @NonNull
-  public final LinearLayout bottomInfoCard;
+  public final MaterialCardView bottomControlCard;
+
+  @NonNull
+  public final Button btnRecenter;
+
+  @NonNull
+  public final Button btnToggleOutage;
 
   @NonNull
   public final ConfidenceEllipseView confidenceEllipseView;
 
   @NonNull
-  public final TextView tvCovarianceInfo;
+  public final MapView mapView;
 
   @NonNull
-  public final TextView tvFilterStatus;
+  public final ProgressBar pbTrustScore;
 
   @NonNull
-  public final TextView tvTitle;
+  public final MaterialCardView telemetryCard;
+
+  @NonNull
+  public final MaterialCardView topHudCard;
+
+  @NonNull
+  public final TextView tvAppName;
+
+  @NonNull
+  public final TextView tvModeBadge;
+
+  @NonNull
+  public final TextView tvNisStatus;
+
+  @NonNull
+  public final TextView tvOutageTimer;
+
+  @NonNull
+  public final TextView tvSpeedHeading;
+
+  @NonNull
+  public final TextView tvTrustLabel;
+
+  @NonNull
+  public final TextView tvUncertainty;
 
   private ActivityMainBinding(@NonNull ConstraintLayout rootView,
-      @NonNull LinearLayout bottomInfoCard, @NonNull ConfidenceEllipseView confidenceEllipseView,
-      @NonNull TextView tvCovarianceInfo, @NonNull TextView tvFilterStatus,
-      @NonNull TextView tvTitle) {
+      @NonNull MaterialCardView bottomControlCard, @NonNull Button btnRecenter,
+      @NonNull Button btnToggleOutage, @NonNull ConfidenceEllipseView confidenceEllipseView,
+      @NonNull MapView mapView, @NonNull ProgressBar pbTrustScore,
+      @NonNull MaterialCardView telemetryCard, @NonNull MaterialCardView topHudCard,
+      @NonNull TextView tvAppName, @NonNull TextView tvModeBadge, @NonNull TextView tvNisStatus,
+      @NonNull TextView tvOutageTimer, @NonNull TextView tvSpeedHeading,
+      @NonNull TextView tvTrustLabel, @NonNull TextView tvUncertainty) {
     this.rootView = rootView;
-    this.bottomInfoCard = bottomInfoCard;
+    this.bottomControlCard = bottomControlCard;
+    this.btnRecenter = btnRecenter;
+    this.btnToggleOutage = btnToggleOutage;
     this.confidenceEllipseView = confidenceEllipseView;
-    this.tvCovarianceInfo = tvCovarianceInfo;
-    this.tvFilterStatus = tvFilterStatus;
-    this.tvTitle = tvTitle;
+    this.mapView = mapView;
+    this.pbTrustScore = pbTrustScore;
+    this.telemetryCard = telemetryCard;
+    this.topHudCard = topHudCard;
+    this.tvAppName = tvAppName;
+    this.tvModeBadge = tvModeBadge;
+    this.tvNisStatus = tvNisStatus;
+    this.tvOutageTimer = tvOutageTimer;
+    this.tvSpeedHeading = tvSpeedHeading;
+    this.tvTrustLabel = tvTrustLabel;
+    this.tvUncertainty = tvUncertainty;
   }
 
   @Override
@@ -75,9 +122,21 @@ public final class ActivityMainBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
-      id = R.id.bottomInfoCard;
-      LinearLayout bottomInfoCard = ViewBindings.findChildViewById(rootView, id);
-      if (bottomInfoCard == null) {
+      id = R.id.bottomControlCard;
+      MaterialCardView bottomControlCard = ViewBindings.findChildViewById(rootView, id);
+      if (bottomControlCard == null) {
+        break missingId;
+      }
+
+      id = R.id.btnRecenter;
+      Button btnRecenter = ViewBindings.findChildViewById(rootView, id);
+      if (btnRecenter == null) {
+        break missingId;
+      }
+
+      id = R.id.btnToggleOutage;
+      Button btnToggleOutage = ViewBindings.findChildViewById(rootView, id);
+      if (btnToggleOutage == null) {
         break missingId;
       }
 
@@ -87,26 +146,76 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
-      id = R.id.tvCovarianceInfo;
-      TextView tvCovarianceInfo = ViewBindings.findChildViewById(rootView, id);
-      if (tvCovarianceInfo == null) {
+      id = R.id.mapView;
+      MapView mapView = ViewBindings.findChildViewById(rootView, id);
+      if (mapView == null) {
         break missingId;
       }
 
-      id = R.id.tvFilterStatus;
-      TextView tvFilterStatus = ViewBindings.findChildViewById(rootView, id);
-      if (tvFilterStatus == null) {
+      id = R.id.pbTrustScore;
+      ProgressBar pbTrustScore = ViewBindings.findChildViewById(rootView, id);
+      if (pbTrustScore == null) {
         break missingId;
       }
 
-      id = R.id.tvTitle;
-      TextView tvTitle = ViewBindings.findChildViewById(rootView, id);
-      if (tvTitle == null) {
+      id = R.id.telemetryCard;
+      MaterialCardView telemetryCard = ViewBindings.findChildViewById(rootView, id);
+      if (telemetryCard == null) {
         break missingId;
       }
 
-      return new ActivityMainBinding((ConstraintLayout) rootView, bottomInfoCard,
-          confidenceEllipseView, tvCovarianceInfo, tvFilterStatus, tvTitle);
+      id = R.id.topHudCard;
+      MaterialCardView topHudCard = ViewBindings.findChildViewById(rootView, id);
+      if (topHudCard == null) {
+        break missingId;
+      }
+
+      id = R.id.tvAppName;
+      TextView tvAppName = ViewBindings.findChildViewById(rootView, id);
+      if (tvAppName == null) {
+        break missingId;
+      }
+
+      id = R.id.tvModeBadge;
+      TextView tvModeBadge = ViewBindings.findChildViewById(rootView, id);
+      if (tvModeBadge == null) {
+        break missingId;
+      }
+
+      id = R.id.tvNisStatus;
+      TextView tvNisStatus = ViewBindings.findChildViewById(rootView, id);
+      if (tvNisStatus == null) {
+        break missingId;
+      }
+
+      id = R.id.tvOutageTimer;
+      TextView tvOutageTimer = ViewBindings.findChildViewById(rootView, id);
+      if (tvOutageTimer == null) {
+        break missingId;
+      }
+
+      id = R.id.tvSpeedHeading;
+      TextView tvSpeedHeading = ViewBindings.findChildViewById(rootView, id);
+      if (tvSpeedHeading == null) {
+        break missingId;
+      }
+
+      id = R.id.tvTrustLabel;
+      TextView tvTrustLabel = ViewBindings.findChildViewById(rootView, id);
+      if (tvTrustLabel == null) {
+        break missingId;
+      }
+
+      id = R.id.tvUncertainty;
+      TextView tvUncertainty = ViewBindings.findChildViewById(rootView, id);
+      if (tvUncertainty == null) {
+        break missingId;
+      }
+
+      return new ActivityMainBinding((ConstraintLayout) rootView, bottomControlCard, btnRecenter,
+          btnToggleOutage, confidenceEllipseView, mapView, pbTrustScore, telemetryCard, topHudCard,
+          tvAppName, tvModeBadge, tvNisStatus, tvOutageTimer, tvSpeedHeading, tvTrustLabel,
+          tvUncertainty);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

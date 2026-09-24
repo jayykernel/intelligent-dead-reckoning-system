@@ -34,13 +34,16 @@ class ConfidenceEllipseView @JvmOverloads constructor(
     private var headingDeg: Float = 0.0f
     private var nisPassed: Boolean = true
 
+    // Feature flags
+    var showInternalHud: Boolean = false
+
     // Pixels per meter scale (e.g., 10 pixels = 1 meter for close inspection)
     private var pixelsPerMeter: Float = 8.0f
 
     // Drawing Paints
     private val backgroundPaint = Paint().apply {
         style = Paint.Style.FILL
-        color = Color.WHITE
+        color = Color.TRANSPARENT
     }
 
     private val ellipseFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -206,12 +209,14 @@ class ConfidenceEllipseView @JvmOverloads constructor(
         canvas.drawPath(path, vehicleHeadingPaint)
         canvas.restore()
 
-        // 5. Render HUD Overlay Metrics
-        val hudTextY = 50.0f
-        canvas.drawText("Mode: $mode", 30.0f, hudTextY, textPaint)
-        val nisStr = if (nisPassed) "PASS" else "FAIL"
-        canvas.drawText("Trust: ${(trustScore * 100).toInt()}% | NIS: $nisStr", 30.0f, hudTextY + 40.0f, textPaint)
-        canvas.drawText("95% Uncertainty: ±${String.format("%.1f", ellipse.semiMajorAxisM)} m", 30.0f, hudTextY + 80.0f, textPaint)
-        canvas.drawText("Semi-Axes: [a=${String.format("%.2f", ellipse.semiMajorAxisM)}m, b=${String.format("%.2f", ellipse.semiMinorAxisM)}m]", 30.0f, hudTextY + 120.0f, textPaint)
+        // 5. Render HUD Overlay Metrics (if enabled)
+        if (showInternalHud) {
+            val hudTextY = 50.0f
+            canvas.drawText("Mode: $mode", 30.0f, hudTextY, textPaint)
+            val nisStr = if (nisPassed) "PASS" else "FAIL"
+            canvas.drawText("Trust: ${(trustScore * 100).toInt()}% | NIS: $nisStr", 30.0f, hudTextY + 40.0f, textPaint)
+            canvas.drawText("95% Uncertainty: ±${String.format("%.1f", ellipse.semiMajorAxisM)} m", 30.0f, hudTextY + 80.0f, textPaint)
+            canvas.drawText("Semi-Axes: [a=${String.format("%.2f", ellipse.semiMajorAxisM)}m, b=${String.format("%.2f", ellipse.semiMinorAxisM)}m]", 30.0f, hudTextY + 120.0f, textPaint)
+        }
     }
 }

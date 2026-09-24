@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-37:12
-INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-37:12
-INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-37:12
-INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-37:12
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-41:12
+INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-41:12
+INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-41:12
+INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:1-41:12
 MERGED from [androidx.databinding:viewbinding:8.13.2] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\1315a6306d0272defac00ed358eba6fc\transformed\viewbinding-8.13.2\AndroidManifest.xml:2:1-7:12
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\ebdf3553f3866109240a2f8f85ac82ac\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\f40243e2e7270103a1321616401318ae\transformed\constraintlayout-2.1.4\AndroidManifest.xml:2:1-11:12
@@ -62,43 +62,51 @@ MERGED from [com.google.android.odml:image:1.0.0-beta1] C:\Users\JAYANITHYAN M R
 		INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml
 	xmlns:android
 		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:2:11-69
+uses-permission#android.permission.INTERNET
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:6:5-67
+	android:name
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:6:22-64
+uses-permission#android.permission.ACCESS_NETWORK_STATE
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:7:5-79
+	android:name
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:7:22-76
 uses-permission#android.permission.ACCESS_FINE_LOCATION
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:6:5-79
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:10:5-79
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:6:22-76
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:10:22-76
 uses-permission#android.permission.ACCESS_COARSE_LOCATION
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:7:5-81
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:11:5-81
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:7:22-78
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:11:22-78
 uses-feature#android.hardware.sensor.accelerometer
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:10:5-98
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:14:5-98
 	android:required
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:10:72-95
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:14:72-95
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:10:19-71
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:14:19-71
 uses-feature#android.hardware.sensor.gyroscope
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:11:5-94
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:15:5-94
 	android:required
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:11:68-91
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:15:68-91
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:11:19-67
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:15:19-67
 uses-feature#android.hardware.sensor.compass
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:12:5-93
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:16:5-93
 	android:required
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:12:66-90
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:16:66-90
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:12:19-65
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:16:19-65
 uses-feature#android.hardware.location.gps
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:13:5-90
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:17:5-90
 MERGED from [org.osmdroid:osmdroid-android:6.1.14] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\4a03976f2042ce761252c859afae3486\transformed\osmdroid-android-6.1.14\AndroidManifest.xml:17:5-19:36
 MERGED from [org.osmdroid:osmdroid-android:6.1.14] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\4a03976f2042ce761252c859afae3486\transformed\osmdroid-android-6.1.14\AndroidManifest.xml:17:5-19:36
 	android:required
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:13:64-87
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:17:64-87
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:13:19-63
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:17:19-63
 application
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:15:5-35:19
-INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:15:5-35:19
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:19:5-39:19
+INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:19:5-39:19
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\ebdf3553f3866109240a2f8f85ac82ac\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\ebdf3553f3866109240a2f8f85ac82ac\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\f40243e2e7270103a1321616401318ae\transformed\constraintlayout-2.1.4\AndroidManifest.xml:9:5-20
@@ -126,39 +134,39 @@ MERGED from [com.google.android.odml:image:1.0.0-beta1] C:\Users\JAYANITHYAN M R
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.12.0] C:\Users\JAYANITHYAN M R\.gradle\caches\8.13\transforms\8a72b3731e7921432f0178056e75fbea\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:20:9-35
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:24:9-35
 	android:label
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:18:9-41
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:22:9-41
 	android:roundIcon
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:19:9-63
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:23:9-63
 	tools:targetApi
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:22:9-29
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:26:9-29
 	android:icon
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:17:9-58
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:21:9-58
 	android:allowBackup
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:16:9-35
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:20:9-35
 	android:theme
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:21:9-41
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:25:9-41
 activity#com.example.idr.MainActivity
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:24:9-33:20
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:28:9-37:20
 	android:label
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:27:13-45
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:31:13-45
 	android:exported
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:26:13-36
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:30:13-36
 	android:theme
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:28:13-45
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:32:13-45
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:25:13-41
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:29:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:29:13-32:29
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:33:13-36:29
 action#android.intent.action.MAIN
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:30:17-69
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:34:17-69
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:30:25-66
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:34:25-66
 category#android.intent.category.LAUNCHER
-ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:31:17-77
+ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:35:17-77
 	android:name
-		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:31:27-74
+		ADDED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml:35:27-74
 uses-sdk
 INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from C:\dev\dead reckoning proto\mobile\app\src\main\AndroidManifest.xml

@@ -2,69 +2,221 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFFFF">
+    android:background="#121212">
 
-    <!-- Top Header / Title Bar -->
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:padding="16dp"
-        android:text="Intelligent Dead Reckoning (IDR)"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:textColor="#FF1A1A1A"
-        android:background="#FFF0F0F0"
-        android:elevation="4dp"
+    <!-- 1. Real-Time Offline OSM Map View Layer -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Real-Time Confidence Ellipse Canvas View (N4) -->
+    <!-- 2. Transparent 2D Confidence Ellipse / Covariance Overlay Layer -->
     <com.example.idr.ui.ConfidenceEllipseView
         android:id="@+id/confidenceEllipseView"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="16dp"
-        android:background="#FFFFFFFF"
-        android:elevation="2dp"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
-        app:layout_constraintBottom_toTopOf="@id/bottomInfoCard"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Bottom Status & Telemetry Card -->
-    <LinearLayout
-        android:id="@+id/bottomInfoCard"
+    <!-- 3. Top System Status HUD Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/topHudCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:background="#FFF0F0F0"
-        android:elevation="4dp"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="8dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="#33FFFFFF"
+        app:cardBackgroundColor="#E61E1E1E"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tvAppName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Intelligent Dead Reckoning"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <!-- State Badge (Green/Orange/Red) -->
+                <TextView
+                    android:id="@+id/tvModeBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#2E7D32"
+                    android:paddingStart="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="3dp"
+                    android:text="GNSS AIDED"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Trust / Outage Warning Banner -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvTrustLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Trust Score: 100%"
+                    android:textColor="#CCCCCC"
+                    android:textSize="12sp" />
+
+                <ProgressBar
+                    android:id="@+id/pbTrustScore"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="6dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progress="100"
+                    android:progressTint="#4CAF50" />
+
+                <TextView
+                    android:id="@+id/tvNisStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NIS: PASS"
+                    android:textColor="#4CAF50"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 4. Real-Time Telemetry & Covariance Floating Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/telemetryCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="16dp"
+        app:cardCornerRadius="10dp"
+        app:cardElevation="6dp"
+        app:cardBackgroundColor="#D91A1A1A"
+        app:strokeWidth="1dp"
+        app:strokeColor="#22FFFFFF"
+        app:layout_constraintBottom_toTopOf="@id/bottomControlCard"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <TextView
+                android:id="@+id/tvUncertainty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Uncertainty (95%): ±1.5 m"
+                android:textColor="#EEEEEE"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvSpeedHeading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Speed: 0.0 m/s | Yaw: 0.0°"
+                android:textColor="#AAAAAA"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvOutageTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Outage: None"
+                android:textColor="#888888"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 5. Bottom Interactive Demo & Validation Controls -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/bottomControlCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="#E61E1E1E"
+        app:strokeWidth="1dp"
+        app:strokeColor="#33FFFFFF"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
-            android:id="@+id/tvFilterStatus"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Status: Initializing..."
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#FF333333" />
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="10dp">
 
-        <TextView
-            android:id="@+id/tvCovarianceInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Covariance Trace: Initializing..."
-            android:textSize="12sp"
-            android:textColor="#FF666666" />
-    </LinearLayout>
+            <!-- Toggle GNSS Outage Simulation Button -->
+            <Button
+                android:id="@+id/btnToggleOutage"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="Simulate 60s Outage"
+                android:textSize="12sp"
+                android:backgroundTint="#C62828"
+                android:textColor="#FFFFFF" />
+
+            <!-- Reset / Recenter Button -->
+            <Button
+                android:id="@+id/btnRecenter"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="0.8"
+                android:layout_marginStart="6dp"
+                android:text="Recenter"
+                android:textSize="12sp"
+                android:backgroundTint="#37474F"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
