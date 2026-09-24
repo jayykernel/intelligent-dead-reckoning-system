@@ -94,7 +94,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         // Comply with OpenStreetMap Tile Usage Policy (osm.wiki/Blocked) by supplying a custom User-Agent
-        Configuration.getInstance().userAgentValue = packageName
+        Configuration.getInstance().userAgentValue = "IntelligentDeadReckoning/1.0 (Android; com.example.idr)"
         Configuration.getInstance().load(applicationContext, getPreferences(MODE_PRIVATE))
 
         setContentView(R.layout.activity_main)
