@@ -10,16 +10,32 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.idr.fusion.FusionEngine
 import com.example.idr.ui.ConfidenceEllipseView
 import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.ITileSource
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import kotlin.math.*
 
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        // High-performance OpenStreetMap raster basemap powered by CARTO CDN (Compliant with OSM usage policy)
+        val OSM_VOYAGER: ITileSource = XYTileSource(
+            "CartoVoyager",
+            0, 20, 256, ".png",
+            arrayOf(
+                "https://a.basemaps.cartocdn.com/rastertiles/voyager/",
+                "https://b.basemaps.cartocdn.com/rastertiles/voyager/",
+                "https://c.basemaps.cartocdn.com/rastertiles/voyager/",
+                "https://d.basemaps.cartocdn.com/rastertiles/voyager/"
+            ),
+            "© OpenStreetMap contributors, © CARTO"
+        )
+    }
 
     private lateinit var mapView: MapView
     private lateinit var ellipseView: ConfidenceEllipseView
@@ -113,8 +129,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         mapView = findViewById(R.id.mapView)
-        // Set standard OpenStreetMap tiles
-        mapView.setTileSource(TileSourceFactory.MAPNIK)
+        // Set compliant map tile source
+        mapView.setTileSource(OSM_VOYAGER)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(16.0)
         mapView.overlays.add(trajectoryTrail)
