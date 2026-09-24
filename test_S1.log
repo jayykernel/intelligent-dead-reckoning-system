@@ -1,0 +1,9 @@
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+
+--- Evaluating CAR: S1 ---
+  Outage duration: 60.0s (2069.8s to 2129.8s)
+  Distance travelled: 389.66 m
+  Final position error: 147.41 m
+  Drift %: 37.83 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 101154/102286 (98.9%)
+--> RESULT S1: Drift=37.83% (Err=147.41m)
