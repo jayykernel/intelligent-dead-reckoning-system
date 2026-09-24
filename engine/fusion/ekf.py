@@ -206,7 +206,7 @@ class ErrorStateEKF:
         """
         # 1. Innovation vector
         y = z - h_x
-        if update_type in ["MAG_HEADING", "GNSS_HEADING"]:
+        if update_type in ["MAG_HEADING", "GNSS_HEADING", "MAP_HEADING"]:
             # Wrap angular innovation to [-pi, pi]
             y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
 
@@ -237,7 +237,8 @@ class ErrorStateEKF:
             "innovation": y.tolist()
         })
 
-        if not passed:
+        force_accept = update_type in ["GNSS_POS", "GNSS_VEL", "GNSS_HEADING", "MAP_POS", "ZUPT", "NHC", "ZARU", "AI_SPEED"]
+        if not passed and not force_accept:
             # Gate rejects the inconsistent measurement
             return False, nis, chi2_thresh
 
@@ -416,14 +417,13 @@ class ErrorStateEKF:
         Update with absolute Heading measurement from map-matching (geographic heading: 0 = North, +pi/2 = East, in rad).
         This mimics the magnetometer heading update but is gated by map-matching confidence.
         """
-        z = np.array([heading_rad])
-        h_x = np.array([self.get_euler_angles()[2]])  # Current heading estimate in rad
-        H = np.zeros((1, 15))
-        H[0, 6:9] = np.array([0.0, 0.0, 1.0])  # Derivative of heading w.r.t delta_theta is [0,0,1] for yaw
-
-        R_cov = np.array([[sigma_heading**2]])
-
-        return self.update(z, h_x, H, R_cov, update_type=source, alpha=alpha, timestamp=timestamp)
+        return self.update_heading(
+            heading_rad=heading_rad,
+            sigma_heading=sigma_heading,
+            alpha=alpha,
+            timestamp=timestamp,
+            source=source
+        )
 
     def update_zupt(
         self,

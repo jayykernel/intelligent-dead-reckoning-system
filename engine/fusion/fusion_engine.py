@@ -241,10 +241,10 @@ class GNSSINSFusionEngine:
                 alpha=0.01,
                 timestamp=timestamp
             )
-            # Re-estimate / re-zero gyro bias during zero-velocity stop (ZARU)
+            # Zero Angular Rate Update (ZARU) to continuously observe and re-zero gyro bias
             self.ekf.update_zero_angular_rate(
                 gyro_veh=gyro_veh,
-                sigma_gyro_bias=0.01,
+                sigma_gyro_bias=0.02,
                 alpha=0.01,
                 timestamp=timestamp
             )
