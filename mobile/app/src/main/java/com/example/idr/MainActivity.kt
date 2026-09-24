@@ -92,11 +92,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Comply with OpenStreetMap Tile Usage Policy (osm.wiki/Blocked) by supplying a custom User-Agent
+        Configuration.getInstance().userAgentValue = packageName
         Configuration.getInstance().load(applicationContext, getPreferences(MODE_PRIVATE))
+
         setContentView(R.layout.activity_main)
 
         mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
+        mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(16.0)
         mapView.overlays.add(trajectoryTrail)
 
@@ -116,6 +121,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         mainHandler.post(playbackRunnable)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        mapView.onPause()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mainHandler.removeCallbacks(playbackRunnable)
+        mapView.onDetach()
     }
 
     private fun updateMap(p: DoubleArray, heading: Float) {
