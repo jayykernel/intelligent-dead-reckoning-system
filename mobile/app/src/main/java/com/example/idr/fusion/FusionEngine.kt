@@ -166,7 +166,7 @@ class FusionEngine(
                 // Apply map-matching heading update if we have a matched segment
                 val matchedSeg = mapMatcher!!.lastMatchedSeg
                 if (matchedSeg != null) {
-                    val roadHeadingRad = matchedSeg.bearing_deg * Math.PI / 180.0
+                    val roadHeadingRad = matchedSeg.bearingDeg * Math.PI / 180.0
                     ekf.updateMapMatchingHeading(roadHeadingRad, sigmaHeading = Math.toRadians(5.0), source = "MAP_HEADING")
                 }
             }
