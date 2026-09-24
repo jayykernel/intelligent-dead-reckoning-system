@@ -12,9 +12,9 @@ import kotlin.math.sqrt
  */
 class ConstrainedINS(
     val dt: Double = 0.1,
-    val zuptSpeedThreshold: Double = 0.5,
-    val zuptAccThreshold: Double = 0.5,
-    val zuptGyroThreshold: Double = 0.1,
+    val zuptSpeedThreshold: Double = 1.5,
+    val zuptAccThreshold: Double = 1.5,
+    val zuptGyroThreshold: Double = 0.3,
     val g: Double = 9.80665
 ) {
 
