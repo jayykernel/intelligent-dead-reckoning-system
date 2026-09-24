@@ -17,6 +17,8 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import kotlin.math.*
 
+import java.io.File
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var mapView: MapView
@@ -93,13 +95,25 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Comply with OpenStreetMap Tile Usage Policy (osm.wiki/Blocked) by supplying a custom User-Agent
-        Configuration.getInstance().userAgentValue = "IntelligentDeadReckoning/1.0 (Android; com.example.idr)"
-        Configuration.getInstance().load(applicationContext, getPreferences(MODE_PRIVATE))
+        val config = Configuration.getInstance()
+        // 1. Load preferences FIRST
+        config.load(applicationContext, getPreferences(MODE_PRIVATE))
+
+        // 2. Comply with API 30+ Scoped Storage by setting explicitly to App Cache
+        val osmBaseDir = File(cacheDir, "osmdroid")
+        osmBaseDir.mkdirs()
+        config.osmdroidBasePath = osmBaseDir
+        config.osmdroidTileCache = File(osmBaseDir, "tiles")
+
+        // 3. Comply with OpenStreetMap Tile Usage Policy (osm.wiki/Blocked)
+        // MUST set unique user-agent after `load` overwrites it, and THEN save it so it works on next boot too.
+        config.userAgentValue = "IntelligentDeadReckoningApp/1.0 (Android; idr-contact@example.com) osmdroid"
+        config.save(applicationContext, getPreferences(MODE_PRIVATE))
 
         setContentView(R.layout.activity_main)
 
         mapView = findViewById(R.id.mapView)
+        // Set standard OpenStreetMap tiles
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(16.0)
