@@ -74,6 +74,12 @@ class EdgeFusionEngine:
 
         if is_stopped:
             self.ekf.update_zupt(sigma_zupt=0.01, alpha=0.01, timestamp=timestamp)
+            self.ekf.update_zero_angular_rate(
+                gyro_veh=gyro_raw,
+                sigma_gyro_bias=0.001,
+                alpha=0.01,
+                timestamp=timestamp
+            )
         else:
             self.ekf.update_nhc(
                 vehicle_type=self.current_vehicle_type,
