@@ -43,6 +43,16 @@ class FusionEngine(
     // Mode handler state
     var modeCurrentState = "GNSS_AIDED"
     var modeTimeInState = 0.0
+    private var consecutiveGpsRejections = 0
+
+    fun updateAttitudeFromSensors(qAttitude: DoubleArray) {
+        if (qAttitude.size == 4) {
+            ekf.q[0] = qAttitude[0]
+            ekf.q[1] = qAttitude[1]
+            ekf.q[2] = qAttitude[2]
+            ekf.q[3] = qAttitude[3]
+        }
+    }
 
     fun step(
         accRaw: DoubleArray,
@@ -76,9 +86,10 @@ class FusionEngine(
             currentLeanAngleRad = 0.0
         }
 
-        // 6. NHC / ZUPT
+        // 6. NHC / ZUPT / ZARU
         if (constrainedIns.isStopped(accVeh, gyroVeh, vVeh)) {
             ekf.updateZupt(0.05)
+            ekf.updateZeroAngularRate(gyroVeh, 0.02, 0.01, timestamp)
         } else {
             ekf.updateNhc(currentVehicleType, currentLeanAngleRad, 0.2, 0.2)
         }
@@ -166,7 +177,14 @@ class FusionEngine(
                 // Apply map-matching heading update if we have a matched segment
                 val matchedSeg = mapMatcher!!.lastMatchedSeg
                 if (matchedSeg != null) {
-                    val roadHeadingRad = matchedSeg.bearingDeg * Math.PI / 180.0
+                    val roadBearingDeg = matchedSeg.bearingDeg
+                    val currYawDeg = currentHeadingDeg
+
+                    val diffFwd = ((roadBearingDeg - currYawDeg + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+                    val diffRev = ((roadBearingDeg + 180.0 - currYawDeg + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+
+                    val bestRoadDeg = if (abs(diffFwd) <= abs(diffRev)) roadBearingDeg else (roadBearingDeg + 180.0)
+                    val roadHeadingRad = bestRoadDeg * Math.PI / 180.0
                     ekf.updateMapMatchingHeading(roadHeadingRad, sigmaHeading = Math.toRadians(5.0), source = "MAP_HEADING")
                 }
             }
