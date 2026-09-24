@@ -37,20 +37,35 @@ class CalibrationEngine:
         
         # 1. Isolate stationary periods for Gyro Bias and Gravity Down
         stationary_mask = speed < 0.2
-        if np.sum(stationary_mask) < 20: # Need at least 2 seconds (assuming 10Hz) for reliable bias
-            # Not enough stationary data, relax threshold to accommodate two-wheeler engine idle and GPS speed noise
+        if np.sum(stationary_mask) < 20:
             stationary_mask = speed < 0.5
-            
-        if np.sum(stationary_mask) < 10:
-            print("  WARNING: Not enough stationary data for accurate gyro bias / gravity alignment.")
-            return False
-            
-        stat_acc = acc[stationary_mask]
-        stat_gyro = gyro[stationary_mask]
-        
-        self.gyro_bias = np.mean(stat_gyro, axis=0)
-        
-        g_phone = np.mean(stat_acc, axis=0)
+
+        if np.sum(stationary_mask) >= 10:
+            stat_acc = acc[stationary_mask]
+            stat_gyro = gyro[stationary_mask]
+            self.gyro_bias = np.mean(stat_gyro, axis=0)
+            g_phone = np.mean(stat_acc, axis=0)
+
+            # Check if stationary gravity indicates a heavy tilt (e.g. motorbike on side stand)
+            # If so, and we have clean steady upright driving data, prefer upright driving gravity
+            gyro_norm = np.linalg.norm(gyro, axis=1)
+            upright_mask = (speed > 2.0) & (gyro_norm < 0.15)
+            if np.sum(upright_mask) > 50:
+                g_upright = np.mean(acc[upright_mask], axis=0)
+                # If angle between stat gravity and upright gravity > 20 deg, use upright gravity
+                cos_ang = np.dot(g_phone, g_upright) / (np.linalg.norm(g_phone) * np.linalg.norm(g_upright))
+                if cos_ang < np.cos(np.radians(15.0)):
+                    g_phone = g_upright
+        else:
+            # Fallback to upright driving
+            gyro_norm = np.linalg.norm(gyro, axis=1)
+            upright_mask = (speed > 2.0) & (gyro_norm < 0.15)
+            if np.sum(upright_mask) > 50:
+                g_phone = np.mean(acc[upright_mask], axis=0)
+                self.gyro_bias = np.zeros(3)
+            else:
+                print("  WARNING: Not enough stationary data for accurate gyro bias / gravity alignment.")
+                return False
         
         # Vehicle Z (Up) points opposite to gravity
         z_v_phone = g_phone / np.linalg.norm(g_phone)
@@ -104,13 +119,13 @@ class CalibrationEngine:
         """
         Apply calibration and rotation to turn raw phone IMU into vehicle-frame IMU.
         """
-        # Rotate gyro to vehicle frame (gyro_bias was computed in phone frame)
+        # Rotate gyro to vehicle frame
         gyro_corrected = gyro - self.gyro_bias
         gyro_veh = gyro_corrected @ self.R_phone_to_veh.T
 
         # Rotate raw acc to vehicle frame first
         acc_veh = acc @ self.R_phone_to_veh.T
-        # Subtract accel_bias which is defined in Vehicle Frame ([0, 0, diff])
+        # Subtract accel_bias which is defined in Vehicle Frame
         acc_veh = acc_veh - self.accel_bias
 
         return acc_veh, gyro_veh
