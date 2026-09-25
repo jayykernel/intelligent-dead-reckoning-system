@@ -4,3 +4,6 @@ mobile/.gradle/
 __pycache__/
 *.pyc
 *.log
+
+__pycache__/
+*.pyc
