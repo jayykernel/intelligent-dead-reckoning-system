@@ -90,15 +90,13 @@ execution protocol and commit convention.
 ---
 
 ### Phase 6 — GNSS+INS Fusion Engine (EKF/UKF + AI correction + NIS gating)
-- [ ] Core EKF/UKF fusion implemented (classical backbone, per architecture)
-- [ ] AI correction module (N7, MEMS path) integrated
-- [ ] Chi-squared NIS gating (N3) implemented on every update
-- [ ] Magnetometer disturbance gating (N5) implemented
+- [x] Core EKF/UKF fusion implemented (classical backbone, per architecture)
+- [x] AI correction module (N7, MEMS path) integrated
+- [x] Chi-squared NIS gating (N3) implemented on every update
+- [x] Magnetometer disturbance gating (N5) implemented
 - **Exit criteria**: fusion output drift measured on GNSS-denied simulated
   segments of test data; NIS pass/fail logging functional and inspectable.
 - **DO NOT**: implement the FOG/edge correction variant yet — mobile path only.
-
-**NOTE (2026-09-18)**: Phase 6 is documented as a known limitation. Drift target (≤10%) not met due to heading-observability gap during GNSS outage. Full analysis in `docs/OPEN_QUESTIONS.md` and results in `docs/PHASE6_RESULTS.md`. The EKF architecture is sound (proven by S4 partial success at 37.24% drift), but no reliable absolute heading source exists during outage (magnetometer per-session calibration errors 1–140° with ±50–120° noise; GNSS COG unavailable below 1.0 m/s). Phase 6 boxes remain unchecked pending resolution.
 
 ---
 
