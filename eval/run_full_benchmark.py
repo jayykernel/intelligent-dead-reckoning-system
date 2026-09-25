@@ -327,10 +327,7 @@ def evaluate_dead_reckoning_session(session_config):
     fusion.initialize_state(p0, v0, gt_heading[0], acc[0], calib.R_phone_to_veh, calib.gyro_bias, calib.accel_bias)
 
     # 60s Outage Window
-    if session_name == "Vta26":
-        outage_start = 1290
-    else:
-        outage_start = int(N * 0.4)
+    outage_start = int(N * 0.4)
     outage_end = outage_start + int(60.0 / dt)
     outage_end = min(outage_end, N - int(10.0 / dt))
 
@@ -851,17 +848,33 @@ def generate_all_plots(drift_results, rate_results, transition_results):
 
 
 def main():
+    import argparse
+    from training.dataset_splits import TEST_SESSIONS, TRAIN_SESSIONS
+
+    parser = argparse.ArgumentParser(description="Phase 13 Full Benchmark Validation")
+    parser.add_argument("--split", choices=["test", "train-sanity"], default="test",
+                        help="Which split to evaluate: 'test' (default) or 'train-sanity'")
+    args = parser.parse_args()
+
     print("==================================================================")
-    print("PHASE 13: FULL BENCHMARK VALIDATION")
+    print(f"PHASE 13: FULL BENCHMARK VALIDATION ({args.split.upper()})")
     print("==================================================================")
 
-    sessions_to_eval = [
-        {"category": "car", "driver": "S (Driver A)", "session": "S4"},
-        {"category": "car", "driver": "S (Driver A)", "session": "S1"},
-        {"category": "car", "driver": "Vta (Driver E)", "session": "Vta26"},
-        {"category": "two_wheeler", "session": "session1"},
-        {"category": "two_wheeler", "session": "session2"}
-    ]
+    sessions_to_eval = []
+
+    if args.split == "test":
+        for driver, session in TEST_SESSIONS:
+            sessions_to_eval.append({"category": "car", "driver": driver, "session": session})
+        sessions_to_eval.extend([
+            {"category": "two_wheeler", "session": "session1"},
+            {"category": "two_wheeler", "session": "session2"}
+        ])
+    else:  # train-sanity
+        # Select a representative subset (e.g. S1 and first Vta)
+        for driver, session in TRAIN_SESSIONS:
+            if session in ["S1", "Vta01a"]:
+                sessions_to_eval.append({"category": "car", "driver": driver, "session": session})
+        sessions_to_eval.append({"category": "two_wheeler", "session": "session1"}) # No standard train set for two wheeler in splits yet
 
     drift_results = []
     for cfg in sessions_to_eval:
