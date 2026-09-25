@@ -318,11 +318,8 @@ def evaluate_dead_reckoning_session(session_config):
 
     fusion = ProductionMobileFusionEngine(dt=dt, default_vehicle_type=veh_type, k=1000.0)
 
-    # Inject real ground-truth-derived map for active map-matching during exact outage
-    from engine.map_matching.hmm_matcher import HMMMapMatcher
-    rn = build_gt_road_network(e_gt, n_gt)
-    fusion.road_network = rn
-    fusion.map_matcher = HMMMapMatcher(rn, vehicle_type=veh_type)
+    # Note: Map matching is disabled in this run to measure unconstrained EKF drift + AI speed
+    fusion.map_matcher = None
 
     fusion.initialize_state(p0, v0, gt_heading[0], acc[0], calib.R_phone_to_veh, calib.gyro_bias, calib.accel_bias)
 
@@ -338,7 +335,7 @@ def evaluate_dead_reckoning_session(session_config):
         in_outage = (outage_start <= i <= outage_end)
 
         # Ensure MapMatcher has a clean start right when GNSS drops
-        if i == outage_start:
+        if i == outage_start and fusion.map_matcher is not None:
             fusion.map_matcher.reset_history()
 
         pos_enu = np.array([e_gt[i], n_gt[i], u_gt[i]]) if not in_outage else None
@@ -367,6 +364,7 @@ def evaluate_dead_reckoning_session(session_config):
     outage_dist = float(np.sum(np.sqrt(np.diff(outage_gt_pts[:, 0])**2 + np.diff(outage_gt_pts[:, 1])**2)))
     final_err = float(np.linalg.norm(pos_est[outage_end, :2] - np.array([e_gt[outage_end], n_gt[outage_end]])))
     drift_pct = (final_err / outage_dist) * 100.0 if outage_dist > 0 else 0.0
+    is_stationary = (outage_dist < 50.0)
 
     # NIS stats
     nis_history = fusion.ekf.nis_history
@@ -376,7 +374,7 @@ def evaluate_dead_reckoning_session(session_config):
     pass_rate = (gnss_passed / gnss_total * 100.0) if gnss_total > 0 else 0.0
 
     print(f"  Outage duration: 60.0s ({outage_start * dt:.1f}s to {outage_end * dt:.1f}s)")
-    print(f"  Distance travelled: {outage_dist:.2f} m")
+    print(f"  Distance travelled: {outage_dist:.2f} m{' [STATIONARY/IDLING <50m]' if is_stationary else ''}")
     print(f"  Final position error: {final_err:.2f} m")
     print(f"  Drift %: {drift_pct:.2f} % (Target: <= 10.0%)")
     print(f"  NIS GNSS Acceptance: {gnss_passed}/{gnss_total} ({pass_rate:.1f}%)")
@@ -387,8 +385,9 @@ def evaluate_dead_reckoning_session(session_config):
         "outage_dist_m": outage_dist,
         "final_error_m": final_err,
         "drift_pct": drift_pct,
-        "official_pass": drift_pct <= 10.0,
-        "stretch_pass": drift_pct <= 2.0,
+        "is_stationary": is_stationary,
+        "official_pass": (drift_pct <= 10.0) and not is_stationary,
+        "stretch_pass": (drift_pct <= 2.0) and not is_stationary,
         "gnss_total": gnss_total,
         "gnss_passed": gnss_passed,
         "nis_pass_rate": pass_rate,
@@ -424,9 +423,8 @@ def evaluate_edge_fog_session():
     heading0 = np.degrees(np.arctan2(v0[0], v0[1])) % 360
     engine.initialize_state(p0, v0, heading0)
 
-    # Road network and Map Matcher for Edge Engine during outages
-    edge_rn = build_gt_road_network(gps_pos[:N, 0], gps_pos[:N, 1], step=int(freq * 0.5))
-    edge_matcher = HMMMapMatcher(edge_rn, vehicle_type="car")
+    # Road network and Map Matcher disabled to measure pure FOG integration
+    edge_matcher = None
 
     out_pos = np.zeros((N, 3))
 
@@ -439,33 +437,12 @@ def evaluate_edge_fog_session():
 
         # Clear history precisely at start of outage
         if i == outage_start:
-            edge_matcher.reset_history()
+            pass  # No map matcher to reset
 
         p_gnss = gps_pos[i] if use_gnss else None
         v_gnss = gps_vel[i] if use_gnss else None
 
-        # Map matching on Edge during outage at 10Hz (every 20 steps at 200Hz)
-        if in_outage and (i % 20 == 0):
-            curr_pos = engine.ekf.p
-            curr_yaw_deg = engine.ekf.get_euler_angles_deg()[2]
-            mm_res = edge_matcher.match_point(
-                raw_pos_enu=np.array([curr_pos[0], curr_pos[1], curr_pos[2]]),
-                heading_deg=curr_yaw_deg
-            )
-            map_match_attempts += 1
-            if mm_res.snapped:
-                map_match_snapped += 1
-                snapped_pos = np.array([mm_res.snapped_pos[0], mm_res.snapped_pos[1], curr_pos[2]])
-                engine.ekf.update_map_matching_position(snapped_pos, sigma_pos=1.0)
-                matchedSeg = edge_matcher.last_matched_seg
-                if matchedSeg is not None:
-                    road_bearing_deg = matchedSeg.bearing_deg
-                    diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
-                    diff_rev = ((road_bearing_deg + 180 - curr_yaw_deg + 180) % 360) - 180
-                    road_heading_rad = np.radians(road_bearing_deg if abs(diff_fwd) <= abs(diff_rev) else road_bearing_deg + 180.0)
-                    engine.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=np.radians(1.5), source="MAP_HEADING")
-            if i % 200 == 0:  # Print every 200 steps (1 second at 200Hz)
-                print(f"[EDGE MAP MATCH] i={i}, attempts={map_match_attempts}, snapped={map_match_snapped}, snapped ratio={map_match_snapped/max(map_match_attempts,1):.2f}")
+        # Map matching disabled for pure FOG integration test
 
         res = engine.step(acc[i], gyro[i], p_gnss, v_gnss, timestamps[i])
         out_pos[i] = res["pos"]
