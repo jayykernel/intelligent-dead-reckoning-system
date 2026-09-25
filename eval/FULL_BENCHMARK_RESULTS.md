@@ -38,8 +38,8 @@
 
 | Platform | Target Rate | Measured Latency (Mean) | 95th Percentile | Measured Throughput | Status | Hardware Note |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Mobile App (Android/Kotlin)** | 10.0 Hz | 2.518 ms | 4.284 ms | **397.1 Hz** | **PASS** | Evaluated on phone pipeline & emulator |
-| **Edge Engine (C++/Python Wrapper)** | ~200.0 Hz | 2.014 ms | 2.670 ms | **496.6 Hz** | **PASS** | Measured on developer machine CPU; not yet validated on target embedded edge hardware. |
+| **Mobile App (Android/Kotlin)** | 10.0 Hz | 1.581 ms | 2.833 ms | **632.5 Hz** | **PASS** | Evaluated on phone pipeline & emulator |
+| **Edge Engine (C++/Python Wrapper)** | ~200.0 Hz | 1.113 ms | 1.653 ms | **898.3 Hz** | **PASS** | Measured on developer machine CPU; not yet validated on target embedded edge hardware. |
 
 ---
 
