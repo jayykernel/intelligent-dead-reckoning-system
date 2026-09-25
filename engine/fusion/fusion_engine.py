@@ -269,22 +269,21 @@ class GNSSINSFusionEngine:
             )
 
         # 7. Magnetometer Disturbance Gating (N5)
-        # Skip magnetometer heading updates entirely - disable N5
-        # mag_used = False
-        # if mag_raw is not None:
-        #     # Rotate mag to vehicle frame
-        #     mag_veh = mag_raw @ self.calib.R_phone_to_veh.T
-        #     is_clean, mag_yaw, mag_info = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
-        #     if is_clean and mag_yaw is not None:
-        #         # Apply 1-DOF NIS gated heading update whenever magnetometer is clean
-        #         passed, _, _ = self.ekf.update_heading(
-        #             heading_rad=mag_yaw,
-        #             sigma_heading=np.radians(8.0),
-        #             alpha=0.01,
-        #             timestamp=timestamp,
-        #             source="MAG_HEADING"
-        #         )
-        #         mag_used = passed
+        mag_used = False
+        if mag_raw is not None:
+            # Rotate mag to vehicle frame
+            mag_veh = mag_raw @ self.calib.R_phone_to_veh.T
+            is_clean, mag_yaw, mag_info = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
+            if is_clean and mag_yaw is not None:
+                # Apply 1-DOF NIS gated heading update whenever magnetometer is clean
+                passed, _, _ = self.ekf.update_heading(
+                    heading_rad=mag_yaw,
+                    sigma_heading=np.radians(8.0),
+                    alpha=0.01,
+                    timestamp=timestamp,
+                    source="MAG_HEADING"
+                )
+                mag_used = passed
 
         # 8. GNSS Fix Updates with Predictive Trust Scaling & NIS Gating
         gnss_pos_passed = False
