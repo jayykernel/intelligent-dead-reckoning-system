@@ -199,34 +199,18 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                         sigma_cross = base_sigma_cross / np.sqrt(conf_cross)
                         sigma_cross = max(min(sigma_cross, 5.0), 0.1)
 
-                        self.ekf.update_map_matching_cross_track(
-                            p_start_enu=matchedSeg.p_start,
-                            p_end_enu=matchedSeg.p_end,
-                            sigma_cross=sigma_cross,
-                            timestamp=timestamp
-                        )
-
-                        # Apply map-matching heading update
+                        # Apply map-matching heading and cross-track update
                         road_bearing_deg = matchedSeg.bearing_deg
                         curr_yaw_deg = current_heading_deg
 
                         diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
 
-                        # Only allow 180-degree flip if strictly necessary and we are VERY confident it's the other way.
-                        # Since we use non-holonomic / AI forward speed, we rarely drive backwards.
-                        if abs(diff_fwd) <= 90.0:
-                            road_heading_rad = np.radians(road_bearing_deg)
-                        else:
-                            # Let's completely disable 180 flip during outage!
-                            if not is_gnss_available:
-                                road_heading_rad = np.radians(road_bearing_deg)
-                            else:
-                                road_heading_rad = np.radians(road_bearing_deg + 180.0)
-
-                        # Ultra-tight heading constraint during blackout to hit < 5% target
+                        # Always update heading and cross-track, but adjust uncertainty based on alignment
+                        road_heading_rad = np.radians(road_bearing_deg)
                         if not is_gnss_available:
-                            # Hard-clamp the heading covariance and aggressively pull EKF yaw to road
-                            sigma_heading = np.radians(0.5)
+                            # Base uncertainty increases with misalignment, but cap at a reasonable value
+                            base_uncertainty_deg = 0.5 + 0.1 * abs(diff_fwd)  # degrees
+                            sigma_heading = np.radians(min(base_uncertainty_deg, 5.0))  # cap at 5 degrees
                         else:
                             base_sigma = np.radians(1.5)
                             conf = max(map_match_result.confidence, 0.01)
@@ -235,6 +219,12 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                             sigma_heading = min(sigma_heading, np.radians(5.0))
 
                         self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
+                        self.ekf.update_map_matching_cross_track(
+                            p_start_enu=matchedSeg.p_start,
+                            p_end_enu=matchedSeg.p_end,
+                            sigma_cross=sigma_cross,
+                            timestamp=timestamp
+                        )
                         if not is_gnss_available and int(round(timestamp*10)) % 50 == 0:
                             print(f"[{timestamp:.1f}] MM SNAPPED: seg={matchedSeg.segment_id}, p_est=({current_pos[0]:.1f}, {current_pos[1]:.1f}), p_proj=({map_match_result.snapped_pos[0]:.1f}, {map_match_result.snapped_pos[1]:.1f}), heading={current_heading_deg:.1f}, road_bearing={road_bearing_deg:.1f}")
                 else:
