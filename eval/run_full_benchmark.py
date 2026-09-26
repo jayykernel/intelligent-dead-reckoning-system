@@ -118,11 +118,13 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         # Online Speed Scale Bias Learning (during GNSS-aided)
         if is_gnss_available and gnss_vel_enu is not None:
             speed_2d = float(np.linalg.norm(gnss_vel_enu[:2]))
-            if ai_speed is not None and speed_2d > 3.0 and ai_speed > 3.0:
+            if ai_speed is not None and speed_2d > 2.0 and ai_speed > 1.0:
                 ratio = speed_2d / ai_speed
-                clip_min = 0.5 if self.current_vehicle_type == "two_wheeler" else 0.7
-                clip_max = 2.0 if self.current_vehicle_type == "two_wheeler" else 2.5
-                self.speed_scale = 0.995 * self.speed_scale + 0.005 * np.clip(ratio, clip_min, clip_max)
+                clip_min = 0.5 if self.current_vehicle_type == "two_wheeler" else 0.6
+                clip_max = 2.5 if self.current_vehicle_type == "two_wheeler" else 3.0
+                lr = 0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005
+                self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
+                self.speed_scale = (1.0 - lr) * self.speed_scale + lr * float(np.clip(ratio, clip_min, clip_max))
 
         # Dynamic yaw-variance AI scaling (Phase 6/11 production compromise)
         if ai_speed is not None:
@@ -135,6 +137,10 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             # For two_wheeler, increase uncertainty
             if self.current_vehicle_type == "two_wheeler":
                 sigma_ai_eff *= 3.0
+
+            # CRITICAL: During GNSS outage, hard-cap speed noise to ensure AI velocity is not ignored
+            if not is_gnss_available:
+                sigma_ai_eff = min(sigma_ai_eff, 0.8)
 
             self.ekf.update_ai_forward_speed(
                 speed_fwd=scaled_ai_speed,
@@ -205,12 +211,17 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                         curr_yaw_deg = current_heading_deg
 
                         diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
-                        diff_rev = ((road_bearing_deg + 180 - curr_yaw_deg + 180) % 360) - 180
 
-                        if abs(diff_fwd) <= abs(diff_rev):
+                        # Only allow 180-degree flip if strictly necessary and we are VERY confident it's the other way.
+                        # Since we use non-holonomic / AI forward speed, we rarely drive backwards.
+                        if abs(diff_fwd) <= 90.0:
                             road_heading_rad = np.radians(road_bearing_deg)
                         else:
-                            road_heading_rad = np.radians(road_bearing_deg + 180.0)
+                            # Let's completely disable 180 flip during outage!
+                            if not is_gnss_available:
+                                road_heading_rad = np.radians(road_bearing_deg)
+                            else:
+                                road_heading_rad = np.radians(road_bearing_deg + 180.0)
 
                         # Ultra-tight heading constraint during blackout to hit < 5% target
                         if not is_gnss_available:
@@ -286,7 +297,9 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             "mag_disturbed": self.mag_gate.is_disturbed,
             "gnss_pos_passed": gnss_pos_passed,
             "gnss_vel_passed": gnss_vel_passed,
-            "trust_score": float(trust_score)
+            "trust_score": float(trust_score),
+            "ai_speed": float(ai_speed) if ai_speed is not None else 0.0,
+            "speed_scale": float(getattr(self, 'speed_scale', 1.0))
         }
 
 
@@ -398,6 +411,7 @@ def evaluate_dead_reckoning_session(session_config):
         # Ensure MapMatcher has a clean start right when GNSS drops
         if i == outage_start and fusion.map_matcher is not None:
             fusion.map_matcher.reset_history()
+            print(f'[{session_name}] Entering outage. speed_scale={getattr(fusion, "speed_scale", 1.0):.3f}')
 
         pos_enu = np.array([e_gt[i], n_gt[i], u_gt[i]]) if not in_outage else None
         h_rad = np.radians(gt_heading[i])
@@ -460,7 +474,8 @@ def evaluate_dead_reckoning_session(session_config):
         "gt_traj": np.column_stack([e_gt[:eval_end], n_gt[:eval_end]]),
         "est_traj": pos_est[:, :2],
         "outage_start": outage_start,
-        "outage_end": outage_end
+        "outage_end": outage_end,
+        "results": results
     }
 
 
