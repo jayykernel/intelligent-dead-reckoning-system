@@ -18,15 +18,17 @@ from engine.nhc_zupt.lean_ekf import LeanAngleEKF
 class EdgeFusionEngine:
     def __init__(self, dt: float = 0.005, default_vehicle_type: str = "car"):
         self.dt = dt
+        self.ai_speed_scale = 1.0
 
         # FOG/Navigation-grade IMU tuning (substantially tighter thresholds than mobile MEMS)
         self.ekf = ErrorStateEKF(
             dt=dt,
-            sigma_acc=0.01,           # FOG/Nav-grade has ultra-low noise
-            sigma_gyro=0.001,
-            sigma_acc_bias=1e-5,      # Stable bias, minimal drift
-            sigma_gyro_bias=1e-6
+            sigma_acc=0.001,          # FOG/Nav-grade has ultra-low noise
+            sigma_gyro=0.0001,
+            sigma_acc_bias=1e-6,      # Stable bias, minimal drift
+            sigma_gyro_bias=1e-7
         )
+        self.ekf.gyro_mag_scale = 0.0 # pure stable integration
 
         self.constrained_ins = ConstrainedINS(dt=dt)
         self.lean_ekf = LeanAngleEKF(dt=dt)
@@ -55,6 +57,11 @@ class EdgeFusionEngine:
             b_a0=np.zeros(3),
             b_g0=np.zeros(3)
         )
+        self.ekf.P[0:3, 0:3] = np.eye(3) * 0.01**2
+        self.ekf.P[3:6, 3:6] = np.eye(3) * 0.01**2
+        self.ekf.P[6:9, 6:9] = np.eye(3) * np.radians(0.01)**2
+        self.ekf.P[9:12, 9:12] = np.eye(3) * 1e-6**2
+        self.ekf.P[12:15, 12:15] = np.eye(3) * 1e-7**2
 
     def step(
         self,
@@ -62,7 +69,9 @@ class EdgeFusionEngine:
         gyro_raw: np.ndarray,
         gnss_pos_enu: Optional[np.ndarray] = None,
         gnss_vel_enu: Optional[np.ndarray] = None,
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        ai_speed: Optional[float] = None,
+        lean_angle_rad: float = 0.0
     ) -> Dict:
         # FOG/Edge path: Simplified processing
         # 1. State Propagation (Classical backbone)
@@ -83,29 +92,46 @@ class EdgeFusionEngine:
         else:
             self.ekf.update_nhc(
                 vehicle_type=self.current_vehicle_type,
-                lean_angle_rad=0.0, # Lean-compensation FOG path (optional), simplified here
-                sigma_nhc_x=0.05,
-                sigma_nhc_z=0.05,
+                lean_angle_rad=lean_angle_rad,
+                sigma_nhc_x=0.01,
+                sigma_nhc_z=0.01,
+                alpha=0.01,
+                timestamp=timestamp
+            )
+
+        if ai_speed is not None and self.current_vehicle_type != "two_wheeler":
+            # Learn speed scale if gnss vel available
+            if gnss_vel_enu is not None:
+                gnss_speed = np.linalg.norm(gnss_vel_enu[:2])
+                if gnss_speed > 3.0 and ai_speed > 3.0:
+                    ratio = gnss_speed / ai_speed
+                    self.ai_speed_scale = 0.995 * self.ai_speed_scale + 0.005 * np.clip(ratio, 0.7, 1.3)
+
+            # Inject speed
+            scaled_speed = ai_speed * self.ai_speed_scale
+            self.ekf.update_ai_forward_speed(
+                speed_fwd=scaled_speed,
+                sigma_speed=0.5,
                 alpha=0.01,
                 timestamp=timestamp
             )
 
         # 3. GNSS updates (NIS gated update)
         if gnss_pos_enu is not None:
-             self.ekf.update_gnss_position(
-				p_gnss_enu=gnss_pos_enu,
-				sigma_pos=1.0,
-				alpha=0.01,
-				timestamp=timestamp
-			)
+            self.ekf.update_gnss_position(
+                p_gnss_enu=gnss_pos_enu,
+                sigma_pos=0.1,
+                alpha=0.01,
+                timestamp=timestamp
+            )
 
         if gnss_vel_enu is not None:
-             self.ekf.update_gnss_velocity(
-				v_gnss_enu=gnss_vel_enu,
-				sigma_vel=0.1,
-				alpha=0.01,
-				timestamp=timestamp
-			)
+            self.ekf.update_gnss_velocity(
+                v_gnss_enu=gnss_vel_enu,
+                sigma_vel=0.05,
+                alpha=0.01,
+                timestamp=timestamp
+            )
 
         return {
             "pos": np.copy(self.ekf.p),

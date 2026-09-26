@@ -43,7 +43,7 @@ class GNSSINSFusionEngine:
         # Core EKF with smartphone tuning
         self.ekf = ErrorStateEKF(
             dt=dt,
-            sigma_acc=1.0,           # Phone IMU has high noise/vibration
+            sigma_acc=5.0,           # Phone IMU has high noise/vibration (requires 5.0+ to track AI speed during bumps)
             sigma_gyro=0.1,          # Gyro is also noisy
             sigma_acc_bias=0.05,     # Aggressive bias tracking to handle mount shifts/pitch
             sigma_gyro_bias=0.01
@@ -222,6 +222,7 @@ class GNSSINSFusionEngine:
         fwd_speed = float(v_veh[1])
 
         if self.current_vehicle_type == "two_wheeler":
+            self.lean_ekf.predict(gyro_veh[1])
             self.current_lean_angle_rad = self.lean_ekf.update(
                 acc_x=acc_veh[0],
                 acc_z=acc_veh[2],
@@ -233,7 +234,7 @@ class GNSSINSFusionEngine:
 
         # 6. Apply Continuous Non-Holonomic Constraints (NHC) & ZUPT via EKF Measurement Updates
         # Active continuously as an aiding source regardless of GNSS availability
-        is_stopped = self.constrained_ins._is_stopped(acc_veh, gyro_veh, v_veh)
+        is_stopped = self.constrained_ins._is_stopped(acc_veh, gyro_veh, v_veh, ai_speed=ai_speed)
         if is_stopped:
             # Stationary vehicle: 3D zero velocity update
             self.ekf.update_zupt(

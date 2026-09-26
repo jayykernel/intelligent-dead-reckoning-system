@@ -38,6 +38,7 @@ class ErrorStateEKF:
         self.sigma_gyro = sigma_gyro
         self.sigma_acc_bias = sigma_acc_bias
         self.sigma_gyro_bias = sigma_gyro_bias
+        self.gyro_mag_scale = 2.0  # Scale factor for dynamic gyro noise (0.0 for FOG-grade)
 
         # Nominal states
         self.p = np.zeros(3)  # Position ENU
@@ -169,7 +170,7 @@ class ErrorStateEKF:
         # High angular rates increase integration errors and scale factor uncertainties
         # Scale proportionally to gyro magnitude to capture gyro integration error ~= gyro_rate * dt
         gyro_mag = np.linalg.norm(gyro_corr)
-        adaptive_sigma_gyro = self.sigma_gyro * Q_scale + 2.0 * gyro_mag  # Add 2x rate magnitude as uncertainty
+        adaptive_sigma_gyro = self.sigma_gyro * Q_scale + self.gyro_mag_scale * gyro_mag
         Q[6:9, 6:9] = np.eye(3) * (adaptive_sigma_gyro * dt)**2
 
         # Bias random walks
@@ -237,7 +238,7 @@ class ErrorStateEKF:
             "innovation": y.tolist()
         })
 
-        force_accept = update_type in ["GNSS_POS", "GNSS_VEL", "GNSS_HEADING", "MAP_POS", "ZUPT", "NHC", "ZARU", "AI_SPEED"]
+        force_accept = update_type in ["GNSS_POS", "GNSS_VEL", "GNSS_HEADING", "MAP_POS", "MAP_HEADING", "ZUPT", "NHC", "ZARU", "AI_SPEED"]
         if not passed and not force_accept:
             # Gate rejects the inconsistent measurement
             return False, nis, chi2_thresh
@@ -343,8 +344,10 @@ class ErrorStateEKF:
         R = self.quat_to_rot(self.q)
         current_yaw = float(np.arctan2(R[0, 1], R[1, 1]))
 
-        z = np.array([heading_rad])
-        h_x = np.array([current_yaw])
+        # Fix geographic heading mismatch (heading_rad 0..2pi, current_yaw -pi..pi)
+        innovation = (heading_rad - current_yaw + np.pi) % (2 * np.pi) - np.pi
+        z = np.array([innovation])
+        h_x = np.array([0.0])
 
         # Jacobian w.r.t delta_theta_z (body frame):
         # R_new[:, 1] = R[:, 1] - R[:, 0] * delta_theta_z => psi_new = psi - delta_theta_z
@@ -379,12 +382,48 @@ class ErrorStateEKF:
         H = np.zeros((1, 15))
         # Derivative w.r.t delta_v: y_axis_nav
         H[0, 3:6] = y_axis_nav
-        # Derivative w.r.t delta_theta: y_axis_nav x v_nav (small, can include or omit)
-        H[0, 6:9] = np.cross(y_axis_nav, self.v)
+        # Decouple attitude from AI speed to prevent cross-axis attitude corruption
+        # H[0, 6:9] = np.cross(y_axis_nav, self.v)
 
         R_cov = np.array([[sigma_speed**2]])
 
         return self.update(z, h_x, H, R_cov, update_type="AI_SPEED", alpha=alpha, timestamp=timestamp)
+
+    def update_map_matching_cross_track(
+        self,
+        p_start_enu: np.ndarray,
+        p_end_enu: np.ndarray,
+        sigma_cross: float = 0.5,
+        alpha: float = 0.01,
+        timestamp: float = 0.0
+    ) -> Tuple[bool, float, float]:
+        """
+        Update with cross-track position constraint from map-matching.
+        Constrains cross-track error to 0 while allowing along-track freedom.
+        """
+        # Direction vector u = (p_end - p_start) / norm
+        u = p_end_enu[:2] - p_start_enu[:2]
+        length = np.linalg.norm(u)
+        if length < 1e-6:
+            return False, 0.0, 0.0
+        u /= length
+
+        # Normal vector n = [-u_N, u_E]
+        n = np.array([-u[1], u[0]])
+
+        # Cross-track error d_cross = n . (p_est - p_start)
+        d_cross = np.dot(n, self.p[:2] - p_start_enu[:2])
+
+        z = np.array([0.0])
+        h_x = np.array([d_cross])
+
+        H = np.zeros((1, 15))
+        # H[0, 0:2] = n_E, n_N
+        H[0, 0:2] = n
+
+        R_cov = np.array([[sigma_cross**2]])
+
+        return self.update(z, h_x, H, R_cov, update_type="MAP_CROSS_TRACK", alpha=alpha, timestamp=timestamp)
 
     def update_map_matching_position(
         self,
@@ -510,8 +549,9 @@ class ErrorStateEKF:
         H[0, 3:6] = M[0, :]
         H[1, 3:6] = M[2, :]
         # Derivative w.r.t delta_theta
-        H[0, 6:9] = N[0, :]
-        H[1, 6:9] = N[2, :]
+        # Decouple attitude from NHC to prevent divergence on highly stable IMUs
+        # H[0, 6:9] = N[0, :]
+        # H[1, 6:9] = N[2, :]
 
         R_cov = np.diag([sigma_nhc_x**2, sigma_nhc_z**2])
 

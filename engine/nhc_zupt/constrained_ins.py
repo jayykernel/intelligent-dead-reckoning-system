@@ -22,10 +22,13 @@ class ConstrainedINS:
         self.zupt_gyro_threshold = zupt_gyro_threshold
         self.g = 9.80665
 
-    def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray = None) -> bool:
+    def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray = None, ai_speed: float = None) -> bool:
         """
-        Detect if the vehicle is stationary based on specific force, gyro, and current velocity estimate.
+        Detect if the vehicle is stationary based on specific force, gyro, current velocity, and ai_speed.
         """
+        if ai_speed is not None and ai_speed > 0.5:
+            return False
+
         acc_mag = np.linalg.norm(acc_veh)
         gyro_mag = np.linalg.norm(gyro_veh)
 

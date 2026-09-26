@@ -167,9 +167,9 @@ execution protocol and commit convention.
 ---
 
 ### Phase 14 — Finale Polish & Demo Readiness
-- [ ] Demo script / scenario prepared (including a real or simulated GNSS
+- [x] Demo script / scenario prepared (including a real or simulated GNSS
   blackout to showcase live)
-- [ ] Final README, architecture diagram, and results summary finalized
-- [ ] Repo history reviewed: every phase has its commit(s), nothing missing
+- [x] Final README, architecture diagram, and results summary finalized
+- [x] Repo history reviewed: every phase has its commit(s), nothing missing
 - **Exit criteria**: a person unfamiliar with the repo can clone it, follow
   the README, and reproduce the benchmark results.

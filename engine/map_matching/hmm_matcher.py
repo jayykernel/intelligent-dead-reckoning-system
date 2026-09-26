@@ -84,14 +84,16 @@ class HMMMapMatcher:
         self,
         dist_m: float,
         heading_deg: Optional[float],
-        seg: RoadSegment
+        seg: RoadSegment,
+        sigma_z_param: Optional[float] = None
     ) -> float:
         """
         Compute emission probability P(z_t | c_i).
         Gaussian distance probability + heading alignment term.
         """
+        sigma_dist = sigma_z_param if sigma_z_param is not None else self.sigma_z
         # 1. Distance likelihood: Gaussian N(0, sigma_z^2)
-        p_dist = (1.0 / (np.sqrt(2.0 * np.pi) * self.sigma_z)) * np.exp(-0.5 * (dist_m / self.sigma_z)**2)
+        p_dist = (1.0 / (np.sqrt(2.0 * np.pi) * sigma_dist)) * np.exp(-0.5 * (dist_m / sigma_dist)**2)
 
         # 2. Heading alignment likelihood
         if heading_deg is not None and seg.length > 1.0:
@@ -153,16 +155,23 @@ class HMMMapMatcher:
     def match_point(
         self,
         raw_pos_enu: np.ndarray,
-        heading_deg: Optional[float] = None
+        heading_deg: Optional[float] = None,
+        pos_sigma_m: Optional[float] = None
     ) -> MapMatchingResult:
         """
         Online HMM map matching step for a single position measurement.
         """
         pt = raw_pos_enu[:2]
+
+        # Adaptive search radius and emission scale based on positioning uncertainty
+        eff_sigma_z = max(self.sigma_z, pos_sigma_m) if pos_sigma_m is not None else self.sigma_z
+        search_radius = max(self.search_radius, eff_sigma_z * 3.0)
+        max_dev = max(self.max_deviation_m, eff_sigma_z * 3.0)
+
         candidates = self.road_network.find_candidate_segments(
             point_enu=raw_pos_enu,
-            radius_m=self.search_radius,
-            max_candidates=8
+            radius_m=search_radius,
+            max_candidates=16
         )
 
         # 1. No-Snap Fallback Check: No candidates in range
@@ -179,11 +188,11 @@ class HMMMapMatcher:
         current_candidates = []
         for seg, proj, dist in candidates:
             # Check maximum deviation
-            if dist > self.max_deviation_m:
+            if dist > max_dev:
                 continue
 
-            emit_p = self._emission_prob(dist, heading_deg, seg)
-            if emit_p >= self.min_confidence:
+            emit_p = self._emission_prob(dist, heading_deg, seg, sigma_z_param=eff_sigma_z)
+            if emit_p >= 1e-12:  # Accept any numerically non-zero candidate
                 current_candidates.append({
                     "seg": seg,
                     "proj": proj,
@@ -284,6 +293,10 @@ class HMMMapMatcher:
         self.last_matched_seg = best_cand["seg"]
 
         snapped_3d = np.array([best_cand["proj"][0], best_cand["proj"][1], raw_pos_enu[2] if len(raw_pos_enu) > 2 else 0.0])
+        # Debug print if drifting
+        if pos_sigma_m is not None and len(self.history_states) % 10 == 0:
+            pass # We could print here, but let's do it in run_full_benchmark
+
         return MapMatchingResult(
             raw_pos_enu=raw_pos_enu,
             snapped_pos_enu=snapped_3d,
