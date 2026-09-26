@@ -105,15 +105,26 @@ class RoadNetwork:
                     if n1_id in nodes and n2_id in nodes:
                         p1 = nodes[n1_id]
                         p2 = nodes[n2_id]
-                        seg = RoadSegment(
-                            segment_id=segment_id,
-                            osm_way_id=elem["id"],
-                            p_start_enu=p1,
-                            p_end_enu=p2,
-                            highway_type=highway,
-                            oneway=oneway
-                        )
-                        if seg.length > 0.5:  # Ignore zero-length fragments
+
+                        vec = p2 - p1
+                        length = float(np.linalg.norm(vec))
+                        if length < 0.5:
+                            continue
+
+                        # Subdivide long segments into max 10m chunks for better tangent adherence on curves
+                        num_chunks = max(1, int(np.ceil(length / 10.0)))
+                        for j in range(num_chunks):
+                            chunk_p1 = p1 + (j / num_chunks) * vec
+                            chunk_p2 = p1 + ((j + 1) / num_chunks) * vec
+
+                            seg = RoadSegment(
+                                segment_id=segment_id,
+                                osm_way_id=elem["id"],
+                                p_start_enu=chunk_p1,
+                                p_end_enu=chunk_p2,
+                                highway_type=highway,
+                                oneway=oneway
+                            )
                             self.segments.append(seg)
                             segment_id += 1
 

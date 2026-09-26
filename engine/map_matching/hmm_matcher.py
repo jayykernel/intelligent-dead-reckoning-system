@@ -141,7 +141,7 @@ class HMMMapMatcher:
             if not connected:
                 # Add a massive "jump penalty" (simulate having to drive around the block)
                 # Typically, topological distance >> euclidean distance if jumping.
-                d_route = d_route_euclidean + 200.0
+                d_route = d_route_euclidean + 500.0
             else:
                 d_route = d_route_euclidean
         else:
@@ -163,10 +163,10 @@ class HMMMapMatcher:
         """
         pt = raw_pos_enu[:2]
 
-        # Adaptive search radius and emission scale based on positioning uncertainty
-        eff_sigma_z = max(self.sigma_z, pos_sigma_m) if pos_sigma_m is not None else self.sigma_z
-        search_radius = max(self.search_radius, eff_sigma_z * 3.0)
-        max_dev = max(self.max_deviation_m, eff_sigma_z * 3.0)
+        # Adaptive search radius and emission scale based on positioning uncertainty (capped to prevent wild jumps)
+        eff_sigma_z = min(35.0, max(self.sigma_z, pos_sigma_m)) if pos_sigma_m is not None else self.sigma_z
+        search_radius = max(self.search_radius, eff_sigma_z * 2.5)
+        max_dev = max(self.max_deviation_m, eff_sigma_z * 2.5)
 
         candidates = self.road_network.find_candidate_segments(
             point_enu=raw_pos_enu,
