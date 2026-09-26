@@ -238,7 +238,7 @@ class ErrorStateEKF:
             "innovation": y.tolist()
         })
 
-        force_accept = update_type in ["GNSS_POS", "GNSS_VEL", "GNSS_HEADING", "MAP_POS", "MAP_HEADING", "ZUPT", "NHC", "ZARU", "AI_SPEED"]
+        force_accept = update_type in ["GNSS_POS", "GNSS_VEL", "GNSS_HEADING", "MAP_POS", "MAP_CROSS_TRACK", "MAP_HEADING", "ZUPT", "NHC", "ZARU", "AI_SPEED"]
         if not passed and not force_accept:
             # Gate rejects the inconsistent measurement
             return False, nis, chi2_thresh
