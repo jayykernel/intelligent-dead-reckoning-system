@@ -14,11 +14,13 @@ from typing import Dict, Optional
 from engine.fusion.ekf import ErrorStateEKF
 from engine.nhc_zupt.constrained_ins import ConstrainedINS
 from engine.nhc_zupt.lean_ekf import LeanAngleEKF
+from engine.calibration.calibrator import CalibrationEngine
 
 class EdgeFusionEngine:
     def __init__(self, dt: float = 0.005, default_vehicle_type: str = "car"):
         self.dt = dt
         self.ai_speed_scale = 1.0
+        self.calibrator = CalibrationEngine()  # Per-unit calibration (N8)
 
         # FOG/Navigation-grade IMU tuning (substantially tighter thresholds than mobile MEMS)
         self.ekf = ErrorStateEKF(
@@ -39,7 +41,20 @@ class EdgeFusionEngine:
         p0_enu: np.ndarray,
         v0_enu: np.ndarray,
         heading0_deg: float,
+        acc_raw: np.ndarray = None,
+        gyro_raw: np.ndarray = None,
+        speed_samples: np.ndarray = None,
+        dt: float = 0.005
     ):
+        """
+        Initialize the engine state and run per-unit calibration (N8).
+
+        For FOG/Nav-grade units, calibration covers unit-to-unit variance assuming rigid vehicle mounting.
+        """
+        # Run calibration if initial IMU samples provided
+        if acc_raw is not None and gyro_raw is not None and speed_samples is not None:
+            self.calibrator.calibrate_from_session(acc_raw, gyro_raw, speed_samples, dt=dt)
+
         psi = np.radians(heading0_deg)
         R_veh_to_nav = np.array([
             [np.cos(psi), np.sin(psi), 0.0],
@@ -50,12 +65,16 @@ class EdgeFusionEngine:
         from engine.strapdown import dcm_to_quat
         q0 = dcm_to_quat(R_veh_to_nav)
 
+        # Use calibrated biases for initial state
+        b_a0 = self.calibrator.accel_bias if self.calibrator.is_calibrated else np.zeros(3)
+        b_g0 = self.calibrator.gyro_bias if self.calibrator.is_calibrated else np.zeros(3)
+
         self.ekf.set_initial_state(
             p0=p0_enu,
             v0=v0_enu,
             q0=q0,
-            b_a0=np.zeros(3),
-            b_g0=np.zeros(3)
+            b_a0=b_a0,
+            b_g0=b_g0
         )
         self.ekf.P[0:3, 0:3] = np.eye(3) * 0.01**2
         self.ekf.P[3:6, 3:6] = np.eye(3) * 0.01**2
@@ -74,17 +93,20 @@ class EdgeFusionEngine:
         lean_angle_rad: float = 0.0
     ) -> Dict:
         # FOG/Edge path: Simplified processing
-        # 1. State Propagation (Classical backbone)
-        self.ekf.predict(acc_raw=acc_raw, gyro_raw=gyro_raw, dt=self.dt, Q_scale=1.0)
+        # 1. Apply calibration to raw IMU inputs (N8)
+        acc_veh, gyro_veh = self.calibrator.apply(acc_raw, gyro_raw)
 
-        # 2. Constraints (NHC/ZUPT)
+        # 2. State Propagation (Classical backbone)
+        self.ekf.predict(acc_raw=acc_veh, gyro_raw=gyro_veh, dt=self.dt, Q_scale=1.0)
+
+        # 3. Constraints (NHC/ZUPT) using calibrated vehicle-frame IMU
         v_veh = self.ekf.quat_to_rot(self.ekf.q).T @ self.ekf.v
-        is_stopped = self.constrained_ins._is_stopped(acc_raw, gyro_raw, v_veh)
+        is_stopped = self.constrained_ins._is_stopped(acc_veh, gyro_veh, v_veh)
 
         if is_stopped:
             self.ekf.update_zupt(sigma_zupt=0.01, alpha=0.01, timestamp=timestamp)
             self.ekf.update_zero_angular_rate(
-                gyro_veh=gyro_raw,
+                gyro_veh=gyro_veh,
                 sigma_gyro_bias=0.001,
                 alpha=0.01,
                 timestamp=timestamp
@@ -116,7 +138,7 @@ class EdgeFusionEngine:
                 timestamp=timestamp
             )
 
-        # 3. GNSS updates (NIS gated update)
+        # 4. GNSS updates (NIS gated update)
         if gnss_pos_enu is not None:
             self.ekf.update_gnss_position(
                 p_gnss_enu=gnss_pos_enu,

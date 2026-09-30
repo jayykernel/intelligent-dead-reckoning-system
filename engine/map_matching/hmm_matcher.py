@@ -134,7 +134,9 @@ class HMMMapMatcher:
         # the real route distance would be much larger than the euclidean projection distance.
         if not same_seg:
             # Check if they share end points (simple graph adjacency)
-            connected = (np.linalg.norm(prev_seg.p_start - curr_seg.p_start) < 2.0 or
+            # or if they belong to the same parent osm_way
+            connected = (prev_seg.osm_way_id == curr_seg.osm_way_id or
+                         np.linalg.norm(prev_seg.p_start - curr_seg.p_start) < 2.0 or
                          np.linalg.norm(prev_seg.p_end - curr_seg.p_start) < 2.0 or
                          np.linalg.norm(prev_seg.p_start - curr_seg.p_end) < 2.0 or
                          np.linalg.norm(prev_seg.p_end - curr_seg.p_end) < 2.0)

@@ -73,7 +73,7 @@ hasn't been reached yet.
 
 ## Repository structure (fixed — do not reorganize)
 
-```
+
 /docs                     architecture, phase checklist, novelty spec, benchmarks
 /data
   /raw                     IO-VNBD + any collected data, untouched
@@ -91,7 +91,7 @@ hasn't been reached yet.
 /edge                      edge-deployable engine packaging (consumes /engine)
 /eval                      benchmark scripts, drift measurement, plots
 /screening_package         the screening-round deliverable (model + plots + writeup)
-```
+
 
 **New Rule**: No script, test, or debug file may ever be created at the repository root. Debug and ad-hoc investigation scripts belong in the relevant module's `tests/` subfolder (e.g. `engine/fusion/tests/`, `engine/calibration/tests/`) — create that subfolder if it doesn't exist yet, matching the module the code under investigation belongs to. This applies for the rest of the project, all remaining phases, no exceptions.
 

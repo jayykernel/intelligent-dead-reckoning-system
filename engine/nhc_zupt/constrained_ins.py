@@ -77,3 +77,41 @@ class ConstrainedINS:
 
         else:
             raise ValueError(f"Unknown vehicle type: {vehicle_type}")
+
+    def constrain(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray, vehicle_type: str, lean_angle_rad: float = 0.0) -> np.ndarray:
+        """
+        Apply NHC/ZUPT or lean-compensated NHC to the vehicle-frame velocity.
+        """
+        # ZUPT: if stopped, set velocity to zero
+        if self._is_stopped(acc_veh, gyro_veh, v_veh):
+            return np.zeros(3)
+
+        if vehicle_type == 'car':
+            # Standard NHC (Vehicle Frame: X Right, Y Forward, Z Up)
+            # No lateral slide (x = 0), no vertical velocity (z = 0)
+            v_constrained = v_veh.copy()
+            v_constrained[0] = 0.0  # lateral (x)
+            v_constrained[2] = 0.0  # vertical (z)
+            return v_constrained
+
+        elif vehicle_type == 'two_wheeler':
+            # Lean-compensated NHC (N1)
+            # Forward is Y-axis. Roll/lean rotation is around Y-axis by -lean_angle.
+            phi = lean_angle_rad
+            # Rotation matrix around Y-axis by -phi
+            c, s = np.cos(phi), np.sin(phi)
+            R_y = np.array([
+                [c, 0.0, s],
+                [0.0, 1.0, 0.0],
+                [-s, 0.0, c]
+            ])
+            # Transform to road frame
+            v_road = R_y @ v_veh
+            # Apply NHC in road frame: no lateral slide (x_road = 0) and no vertical velocity (z_road = 0)
+            v_road_constrained = np.array([0.0, v_road[1], 0.0])
+            # Transform back to vehicle frame
+            v_constrained = R_y.T @ v_road_constrained
+            return v_constrained
+
+        else:
+            raise ValueError(f"Unknown vehicle type: {vehicle_type}")

@@ -38,6 +38,7 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         super().__init__(*args, **kwargs)
         self.k = k
         self.speed_scale = 1.0
+        self._speed_scale_updates = 0  # Track number of updates for learning rate scheduling
         # Initialize road network and map matcher
         from engine.map_matching import RoadNetwork, HMMMapMatcher
         self.road_network = RoadNetwork(lat0=0.0, lon0=0.0)
@@ -118,13 +119,16 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         # Online Speed Scale Bias Learning (during GNSS-aided)
         if is_gnss_available and gnss_vel_enu is not None:
             speed_2d = float(np.linalg.norm(gnss_vel_enu[:2]))
-            if ai_speed is not None and speed_2d > 2.0 and ai_speed > 1.0:
+            # Calculate yaw rate to prevent calibrating scale factor inside sharp turns
+            # where centrifugal forces corrupt the AI speed output
+            yaw_rate = abs(gyro_veh[2])
+            if ai_speed is not None and speed_2d > 5.0 and ai_speed > 1.0 and yaw_rate < 0.1:
                 ratio = speed_2d / ai_speed
-                clip_min = 0.5 if self.current_vehicle_type == "two_wheeler" else 0.6
-                clip_max = 2.5 if self.current_vehicle_type == "two_wheeler" else 3.0
+                clip_min = 0.5 if self.current_vehicle_type == "two_wheeler" else 0.7
+                clip_max = 2.5 if self.current_vehicle_type == "two_wheeler" else 1.4
                 lr = 0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005
                 self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
-                self.speed_scale = (1.0 - lr) * self.speed_scale + lr * float(np.clip(ratio, clip_min, clip_max))
+                self.speed_scale = (1.0 - lr) * getattr(self, 'speed_scale', 1.0) + lr * float(np.clip(ratio, clip_min, clip_max))
 
         # Dynamic yaw-variance AI scaling (Phase 6/11 production compromise)
         if ai_speed is not None:
@@ -148,6 +152,34 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 alpha=0.01,
                 timestamp=timestamp
             )
+
+        # 7. Magnetometer Disturbance Gating (N5) & Calibrated Heading Injection
+        # Only inject if in PURE_DEAD_RECKONING (i.e., outage or GNSS untrusted)
+        mag_used = False
+        if mag_raw is not None:
+            # Apply mag calibration (hard-iron / soft-iron)
+            mag_cal = self.calib.apply_mag_calibration(mag_raw)
+            # Rotate mag to vehicle frame
+            mag_veh = mag_cal @ self.calib.R_phone_to_veh.T
+
+            # Gating
+            is_clean, mag_yaw, _ = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
+
+            if is_clean and mag_yaw is not None:
+                # Injection during GNSS outage
+                if not is_gnss_available:
+                    sigma_mag = np.radians(6.0)
+                    if getattr(self.calib, 'mag_is_calibrated', False):
+                        sigma_mag = np.radians(3.0 + 3.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5)))
+
+                    self.ekf.update_heading(
+                        heading_rad=mag_yaw,
+                        sigma_heading=sigma_mag,
+                        alpha=0.01,
+                        timestamp=timestamp,
+                        source="MAG_HEADING"
+                    )
+                    mag_used = True
 
         gnss_pos_passed = False
         gnss_vel_passed = False
@@ -203,14 +235,62 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                         road_bearing_deg = matchedSeg.bearing_deg
                         curr_yaw_deg = current_heading_deg
 
+                        # Along-track progress constraint: use AI speed × dt to predict along-track distance
+                        # reject map matches where projected along-track progress deviates > 2σ from AI prediction
+                        if not is_gnss_available and ai_speed is not None:
+                            # Predict along-track distance from AI speed
+                            predicted_along_track = ai_speed * self.dt
+                            # Actual along-track progress from previous matched point
+                            if hasattr(self, '_last_along_track_s'):
+                                actual_along_track = np.linalg.norm(matchedSeg.p_start - self._last_matched_point)
+                                along_track_error = abs(predicted_along_track - actual_along_track)
+                                # Reject if error is too large (2 sigma threshold)
+                                if along_track_error > 2.0:  # 2 meters threshold
+                                    # Skip this map match - use dead reckoning instead
+                                    map_match_result.snapped = False
+                                    map_match_result.fallback_reason = "ALONG_TRACK_CONSTRAINT_VIOLATION"
+                                else:
+                                    # Store for next iteration
+                                    self._last_along_track_s = actual_along_track
+                                    self._last_matched_point = matchedSeg.p_start.copy()
+                            else:
+                                # Initialize along-track tracking
+                                self._last_along_track_s = 0.0
+                                self._last_matched_point = matchedSeg.p_start.copy()
+
                         diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
+                        if not matchedSeg.oneway:
+                            diff_rev = ((road_bearing_deg + 180.0 - curr_yaw_deg + 180) % 360) - 180
+                            # Only allow reverse snapping if we aren't completely drifted
+                            # or if the current heading definitely proves we are reversed.
+                            # During blackout, heading drift can exceed 90 deg!
+                            # Let's add a tighter continuity constraint using previous EKF state or just disable 180 snap if we assume cars don't U-turn abruptly.
+                            if abs(diff_rev) < abs(diff_fwd) and is_gnss_available:
+                                # When GNSS is available, trust the EKF heading.
+                                road_bearing_deg = (road_bearing_deg + 180.0) % 360.0
+                                diff_fwd = diff_rev
+                            elif abs(diff_rev) < abs(diff_fwd) and not is_gnss_available:
+                                # During blackout, only allow reverse flip if difference to previous heading is small?
+                                # EKF yaw is already corrupt! We shouldn't trust `curr_yaw_deg` to flip us 180 degrees.
+                                # Instead, rely on the map_matcher's transition probability or just force forward progress based on AI speed.
+                                # Let's NOT flip 180 degrees during GNSS blackout unless the vehicle is physically reversing (vt < 0).
+                                # Since AI speed is always positive, we assume forward travel.
+                                # DO NOT flip.
+                                pass
 
                         # Always update heading and cross-track, but adjust uncertainty based on alignment
                         road_heading_rad = np.radians(road_bearing_deg)
                         if not is_gnss_available:
                             # Base uncertainty increases with misalignment, but cap at a reasonable value
                             base_uncertainty_deg = 0.5 + 0.1 * abs(diff_fwd)  # degrees
-                            sigma_heading = np.radians(min(base_uncertainty_deg, 5.0))  # cap at 5 degrees
+                            # Tighten heading uncertainty when map confidence is high
+                            conf_factor = max(map_match_result.confidence, 0.01)
+                            if conf_factor > 0.7:
+                                # Reduce cap from 5° to 3° when confidence > 0.7
+                                max_uncertainty_deg = 3.0
+                            else:
+                                max_uncertainty_deg = 5.0
+                            sigma_heading = np.radians(min(base_uncertainty_deg, max_uncertainty_deg))  # cap at configured max
                         else:
                             base_sigma = np.radians(1.5)
                             conf = max(map_match_result.confidence, 0.01)
@@ -343,6 +423,10 @@ def evaluate_dead_reckoning_session(session_config):
     calib = CalibrationEngine()
     calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=dt)
 
+    # Magnetometer calibration on initial segment (N8) for absolute heading during outage
+    if mag is not None:
+        calib.calibrate_magnetometer(mag[:1200])
+
     lat0 = synced["gt_lat"].iloc[0]
     lon0 = synced["gt_lon"].iloc[0]
     alt0 = synced["gt_alt"].iloc[0]
@@ -379,12 +463,30 @@ def evaluate_dead_reckoning_session(session_config):
 
     fusion.road_network = rn
     fusion.map_matcher = HMMMapMatcher(rn, vehicle_type=veh_type)
-    fusion.map_matcher.search_radius = 150.0
-    fusion.map_matcher.max_deviation_m = 150.0
+
+    # Tighten map-matching parameters per vehicle type
+    if veh_type == "two_wheeler":
+        # Tighter parameters for two-wheelers to reduce heading ambiguity
+        fusion.map_matcher.search_radius = 80.0      # Reduced from 150m → 80m
+        fusion.map_matcher.heading_weight = 1.0      # Increased from 0.5 → 1.0 during blackout
+        fusion.map_matcher.max_deviation_m = 100.0   # Reduced from 150m → 100m
+    else:
+        # Standard car parameters
+        fusion.map_matcher.search_radius = 150.0
+        fusion.map_matcher.heading_weight = 1.0
+        fusion.map_matcher.max_deviation_m = 150.0
 
     print(f"  Road Network loaded: {len(rn.segments)} segments (synthetic={getattr(rn, 'is_synthetic', rn is not temp_rn if 'temp_rn' in locals() else True)})")
 
     fusion.initialize_state(p0, v0, gt_heading[0], acc[0], calib.R_phone_to_veh, calib.gyro_bias, calib.accel_bias)
+
+    # Transfer magnetometer calibration into the fusion engine's internal calibrator (N8)
+    if calib.mag_is_calibrated:
+        fusion.calib.mag_hard_iron = calib.mag_hard_iron.copy()
+        fusion.calib.mag_soft_iron = calib.mag_soft_iron.copy()
+        fusion.calib.mag_is_calibrated = True
+        fusion.calib.mag_calibration_quality = calib.mag_calibration_quality
+        print(f"  Mag calibration transferred: quality={calib.mag_calibration_quality:.2f}")
 
     # 60s Outage Window
     outage_start = min(int(N * 0.4), 3000)
@@ -902,6 +1004,8 @@ def main():
     parser = argparse.ArgumentParser(description="Phase 13 Full Benchmark Validation")
     parser.add_argument("--split", choices=["test", "train-sanity"], default="test",
                         help="Which split to evaluate: 'test' (default) or 'train-sanity'")
+    parser.add_argument("--session", type=str, default=None,
+                        help="Optional specific session name to run alone (e.g. Vta28)")
     args = parser.parse_args()
 
     print("==================================================================")
@@ -910,7 +1014,27 @@ def main():
 
     sessions_to_eval = []
 
-    if args.split == "test":
+    if args.session is not None:
+        # Search for the specified session in TEST_SESSIONS or two_wheeler
+        found = False
+        for driver, session in TEST_SESSIONS:
+            if session.lower() == args.session.lower():
+                sessions_to_eval.append({"category": "car", "driver": driver, "session": session})
+                found = True
+                break
+        if not found:
+            for driver, session in TRAIN_SESSIONS:
+                if session.lower() == args.session.lower():
+                    sessions_to_eval.append({"category": "car", "driver": driver, "session": session})
+                    found = True
+                    break
+        if not found:
+            if "session" in args.session.lower():
+                sessions_to_eval.append({"category": "two_wheeler", "session": args.session})
+                found = True
+        if not found:
+            raise ValueError(f"Session {args.session} not found in test or train splits.")
+    elif args.split == "test":
         for driver, session in TEST_SESSIONS:
             sessions_to_eval.append({"category": "car", "driver": driver, "session": session})
         sessions_to_eval.extend([
@@ -937,6 +1061,15 @@ def main():
 
     generate_all_plots(drift_results, rate_results, transition_results)
 
+    # Calculate best/worst dynamically
+    car_results = [r for r in drift_results if r['category'] == 'car']
+    tw_results = [r for r in drift_results if r['category'] == 'two_wheeler']
+
+    best_car = min(car_results, key=lambda x: x['drift_pct']) if car_results else None
+    worst_car = max(car_results, key=lambda x: x['drift_pct']) if car_results else None
+    best_tw = min(tw_results, key=lambda x: x['drift_pct']) if tw_results else None
+    worst_tw = max(tw_results, key=lambda x: x['drift_pct']) if tw_results else None
+
     # Compile Consolidated Markdown Summary
     report_md = r"""# Full Benchmark Validation Report (Phase 13)
 
@@ -954,11 +1087,11 @@ def main():
 
     report_md += r"""
 ### Summary of Drift Findings:
-- **Best Case (Car)**: S4 at {:.2f}% drift (Closest to official target; stable heading).
-- **Worst Case (Car)**: S1 at {:.2f}% drift (k=100 dynamic covariance scaling preventing divergence runaway).
-- **Best Case (Two-Wheeler)**: session2 at {:.2f}% drift.
-- **Worst Case (Two-Wheeler)**: session1 at {:.2f}% drift.
-- **Edge FOG Path**: S1 at {:.2f}% drift (81.9% reduction in drift compared to MEMS S1 path).
+- **Best Case (Car)**: {best_car_session} at {best_car_drift:.2f}% drift (Closest to official target; stable heading).
+- **Worst Case (Car)**: {worst_car_session} at {worst_car_drift:.2f}% drift (k=100 dynamic covariance scaling preventing divergence runaway).
+- **Best Case (Two-Wheeler)**: {best_tw_session} at {best_tw_drift:.2f}% drift.
+- **Worst Case (Two-Wheeler)**: {worst_tw_session} at {worst_tw_drift:.2f}% drift.
+- **Edge FOG Path**: S1 at {edge_drift:.2f}% drift (81.9% reduction in drift compared to MEMS S1 path).
 
 > **Documented Limitation (Phase 6)**: No configuration meets the $\le 10\%$ target during extended 60s blackout due to the unobservable yaw heading drift in consumer MEMS/FOG IMUs without absolute heading references. The results are reported faithfully with no cherry-picked runs.
 
@@ -968,8 +1101,8 @@ def main():
 
 | Platform | Target Rate | Measured Latency (Mean) | 95th Percentile | Measured Throughput | Status | Hardware Note |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Mobile App (Android/Kotlin)** | 10.0 Hz | {:.3f} ms | {:.3f} ms | **{:.1f} Hz** | **PASS** | Evaluated on phone pipeline & emulator |
-| **Edge Engine (C++/Python Wrapper)** | ~200.0 Hz | {:.3f} ms | {:.3f} ms | **{:.1f} Hz** | **PASS** | {} |
+| **Mobile App (Android/Kotlin)** | 10.0 Hz | {mobile_mean:.3f} ms | {mobile_p95:.3f} ms | **{mobile_throughput:.1f} Hz** | **PASS** | Evaluated on phone pipeline & emulator |
+| **Edge Engine (C++/Python Wrapper)** | ~200.0 Hz | {edge_mean:.3f} ms | {edge_p95:.3f} ms | **{edge_throughput:.1f} Hz** | **PASS** | {edge_hw} |
 
 ---
 
@@ -988,13 +1121,13 @@ def main():
 | Session | Category | GNSS Updates Evaluated | GNSS Accepted | GNSS Rejected | Acceptance Rate % | Gating Integrity |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 """.format(
-        drift_results[0]['drift_pct'],
-        drift_results[1]['drift_pct'],
-        drift_results[4]['drift_pct'],
-        drift_results[3]['drift_pct'],
-        edge_res['drift_pct'],
-        rate_results['mobile']['mean_ms'], rate_results['mobile']['p95_ms'], rate_results['mobile']['throughput_hz'],
-        rate_results['edge']['mean_ms'], rate_results['edge']['p95_ms'], rate_results['edge']['throughput_hz'], rate_results['edge']['hardware_caveat']
+        best_car_session=best_car['session'] if best_car else "N/A", best_car_drift=best_car['drift_pct'] if best_car else 0.0,
+        worst_car_session=worst_car['session'] if worst_car else "N/A", worst_car_drift=worst_car['drift_pct'] if worst_car else 0.0,
+        best_tw_session=best_tw['session'] if best_tw else "N/A", best_tw_drift=best_tw['drift_pct'] if best_tw else 0.0,
+        worst_tw_session=worst_tw['session'] if worst_tw else "N/A", worst_tw_drift=worst_tw['drift_pct'] if worst_tw else 0.0,
+        edge_drift=edge_res['drift_pct'],
+        mobile_mean=rate_results['mobile']['mean_ms'], mobile_p95=rate_results['mobile']['p95_ms'], mobile_throughput=rate_results['mobile']['throughput_hz'],
+        edge_mean=rate_results['edge']['mean_ms'], edge_p95=rate_results['edge']['p95_ms'], edge_throughput=rate_results['edge']['throughput_hz'], edge_hw=rate_results['edge']['hardware_caveat']
     )
     for r in drift_results:
         if "gnss_total" in r:

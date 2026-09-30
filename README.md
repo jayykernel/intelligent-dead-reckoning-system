@@ -8,26 +8,26 @@ An Intelligent Dead Reckoning system with GNSS+INS fusion for Smart India Hackat
 
 **Official Target**: ≤ 10% drift during 60s GNSS blackout. **Stretch Target**: 1–2% drift.
 
-| Session ID | Vehicle Category | Data Source / Platform | Outage Dist (m) | Final Error (m) | Drift % | Official Target (<=10%) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **S4** | Car | IO-VNBD (MEMS) | 498.70 | 41.64 | **8.35%** | ✅ PASS |
-| **V-Vfa02** | Car | IO-VNBD (MEMS) | 1486.67 | 329.83 | **22.19%** | ❌ FAIL |
-| **Vta26** | Car | IO-VNBD (MEMS) | 3.41 | 98.19 | **0.00%** | ❌ Stationary |
-| **Vta27** | Car | IO-VNBD (MEMS) | 901.11 | 457.59 | **50.78%** | ❌ FAIL |
-| **Vta28** | Car | IO-VNBD (MEMS) | 696.07 | 173.88 | **24.98%** | ❌ FAIL |
-| **Vta29** | Car | IO-VNBD (MEMS) | 468.35 | 82.91 | **17.70%** | ❌ FAIL |
-| **Vta30** | Car | IO-VNBD (MEMS) | 91.52 | 93.98 | **102.68%** | ❌ FAIL |
-| **Vtb11** | Car | IO-VNBD (MEMS) | 224.93 | 99.75 | **44.35%** | ❌ FAIL |
-| **Vtb12** | Car | IO-VNBD (MEMS) | 166.72 | 14.33 | **8.59%** | ✅ PASS |
-| **Vw15** | Car | IO-VNBD (MEMS) | 4.39 | 30.34 | **0.00%** | ❌ Stationary |
-| **Vw16a** | Car | IO-VNBD (MEMS) | 1211.71 | 369.06 | **30.46%** | ❌ FAIL |
-| **Vw16b** | Car | IO-VNBD (MEMS) | 752.55 | 16.11 | **2.14%** | ✅ PASS |
-| **Vw17** | Car | IO-VNBD (MEMS) | 169.99 | 19.48 | **11.46%** | ❌ FAIL |
-| **session1** | Two-Wheeler | Bridge Synthetic | 231.32 | 39.47 | **17.06%** | ❌ FAIL |
-| **session2** | Two-Wheeler | Bridge Synthetic | 211.11 | 55.07 | **26.09%** | ❌ FAIL |
-| **S1 (Synthetic FOG 200Hz)** | Edge Fog | FOG Synthetic | 353.15 | 26.65 | **7.55%** | ✅ PASS |
+| Session ID | Vehicle Category | Data Source / Platform | Outage Dist (m) | Final Error (m) | Drift % | Official Target (<=10%) | Stretch Target (1-2%) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **S4** | Car | IO-VNBD (MEMS) | 498.70 | 27.59 | **5.53%** | ✅ PASS | ❌ FAIL |
+| **V-Vfa02** | Car | IO-VNBD (MEMS) | 1486.67 | 252.36 | **16.98%** | ❌ FAIL | ❌ FAIL |
+| **Vta26** | Car | IO-VNBD (MEMS) | 3.41 | 104.72 | **0.00%** | ❌ Stationary | ❌ FAIL |
+| **Vta27** | Car | IO-VNBD (MEMS) | 901.11 | 210.81 | **23.39%** | ❌ FAIL | ❌ FAIL |
+| **Vta28** | Car | IO-VNBD (MEMS) | 696.07 | 113.44 | **16.30%** | ❌ FAIL | ❌ FAIL |
+| **Vta29** | Car | IO-VNBD (MEMS) | 468.35 | 122.38 | **26.13%** | ❌ FAIL | ❌ FAIL |
+| **Vta30** | Car | IO-VNBD (MEMS) | 91.52 | 64.33 | **70.29%** | ❌ FAIL | ❌ FAIL |
+| **Vtb11** | Car | IO-VNBD (MEMS) | 224.93 | 28.21 | **12.54%** | ❌ FAIL | ❌ FAIL |
+| **Vtb12** | Car | IO-VNBD (MEMS) | 166.72 | 2.65 | **1.59%** | ✅ PASS | ✅ PASS |
+| **Vw15** | Car | IO-VNBD (MEMS) | 4.39 | 39.10 | **0.00%** | ❌ Stationary | ❌ FAIL |
+| **Vw16a** | Car | IO-VNBD (MEMS) | 1211.71 | 301.25 | **24.86%** | ❌ FAIL | ❌ FAIL |
+| **Vw16b** | Car | IO-VNBD (MEMS) | 752.55 | 100.05 | **13.30%** | ❌ FAIL | ❌ FAIL |
+| **Vw17** | Car | IO-VNBD (MEMS) | 169.99 | 15.54 | **9.14%** | ✅ PASS | ❌ FAIL |
+| **session1** | Two Wheeler | Bridge Synthetic | 231.32 | 505.60 | **218.57%** | ❌ FAIL | ❌ FAIL |
+| **session2** | Two Wheeler | Bridge Synthetic | 211.11 | 95.86 | **45.41%** | ❌ FAIL | ❌ FAIL |
+| **S1 (Synthetic FOG 200Hz)** | Edge Fog | FOG Synthetic | 353.15 | 26.65 | **7.55%** | ✅ PASS | ❌ FAIL |
 
-**Key Insight**: Sessions like **S4**, **Vtb12**, and **Vw16b** along with **Edge FOG** successfully pass the ≤10% official target. Extreme drift percentages on idling sequences exist due to near-zero denominators (e.g. Vta26, Vw15 are stationary but the EKF wanders).
+**Key Insight**: Sessions like **S4**, **Vtb12**, and **Vw17** along with **Edge FOG** successfully pass the ≤10% official target (with **Vtb12** reaching the stretch goal at **1.59%**). Extreme drift percentages on idling sequences exist due to near-zero denominators (e.g. Vta26, Vw15 are stationary but the EKF wanders).
 
 > See [`eval/FULL_BENCHMARK_RESULTS.md`](eval/FULL_BENCHMARK_RESULTS.md) for the full report including NIS gating statistics, throughput benchmarks, and detailed optimisation notes.
 
