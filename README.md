@@ -4,7 +4,7 @@ An Intelligent Dead Reckoning system with GNSS+INS fusion for Smart India Hackat
 
 ## Benchmark Results (Phase 13) — Strict TEST_SESSIONS Split
 
-> **Last Updated**: 2026-09-26 — Full Benchmark Validation across 16 test sessions, including 10m KDTree map-matching for stable heading.
+> **Last Updated**: 2026-09-26 — Full Benchmark Validation across 16 test sessions, including 10m KDTree map-matching for stable heading
 
 **Official Target**: ≤ 10% drift during 60s GNSS blackout. **Stretch Target**: 1–2% drift.
 
