@@ -122,11 +122,12 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             # Calculate yaw rate to prevent calibrating scale factor inside sharp turns
             # where centrifugal forces corrupt the AI speed output
             yaw_rate = abs(gyro_veh[2])
-            if ai_speed is not None and speed_2d > 5.0 and ai_speed > 1.0 and yaw_rate < 0.1:
+            min_speed = 2.0 if self.current_vehicle_type == "two_wheeler" else 5.0
+            if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.1:
                 ratio = speed_2d / ai_speed
-                clip_min = 0.5 if self.current_vehicle_type == "two_wheeler" else 0.7
-                clip_max = 2.5 if self.current_vehicle_type == "two_wheeler" else 1.4
-                lr = 0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005
+                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.7
+                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 1.4
+                lr = 0.05 if getattr(self, '_speed_scale_updates', 0) < 20 else (0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005)
                 self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
                 self.speed_scale = (1.0 - lr) * getattr(self, 'speed_scale', 1.0) + lr * float(np.clip(ratio, clip_min, clip_max))
 
@@ -137,10 +138,6 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             scaled_ai_speed = ai_speed * getattr(self, 'speed_scale', 1.0)
             yaw_var_rad2 = float(self.ekf.P[8, 8])
             sigma_ai_eff = sigma_ai * (1.0 + self.k * yaw_var_rad2)
-
-            # For two_wheeler, increase uncertainty
-            if self.current_vehicle_type == "two_wheeler":
-                sigma_ai_eff *= 3.0
 
             # CRITICAL: During GNSS outage, hard-cap speed noise to ensure AI velocity is not ignored
             if not is_gnss_available:
@@ -236,75 +233,67 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                         curr_yaw_deg = current_heading_deg
 
                         # Along-track progress constraint: use AI speed × dt to predict along-track distance
-                        # reject map matches where projected along-track progress deviates > 2σ from AI prediction
+                        # Reject map matches only if there is a massive unphysical jump (> 25m in 0.1s)
                         if not is_gnss_available and ai_speed is not None:
-                            # Predict along-track distance from AI speed
-                            predicted_along_track = ai_speed * self.dt
-                            # Actual along-track progress from previous matched point
-                            if hasattr(self, '_last_along_track_s'):
-                                actual_along_track = np.linalg.norm(matchedSeg.p_start - self._last_matched_point)
-                                along_track_error = abs(predicted_along_track - actual_along_track)
-                                # Reject if error is too large (2 sigma threshold)
-                                if along_track_error > 2.0:  # 2 meters threshold
-                                    # Skip this map match - use dead reckoning instead
+                            if hasattr(self, '_last_matched_point') and self._last_matched_point is not None:
+                                actual_along_track = np.linalg.norm(map_match_result.snapped_pos - self._last_matched_point)
+                                max_allowed_jump = max(15.0, ai_speed * self.dt * 4.0)
+                                if actual_along_track > max_allowed_jump:
                                     map_match_result.snapped = False
                                     map_match_result.fallback_reason = "ALONG_TRACK_CONSTRAINT_VIOLATION"
                                 else:
-                                    # Store for next iteration
-                                    self._last_along_track_s = actual_along_track
-                                    self._last_matched_point = matchedSeg.p_start.copy()
+                                    self._last_matched_point = map_match_result.snapped_pos.copy()
                             else:
-                                # Initialize along-track tracking
-                                self._last_along_track_s = 0.0
-                                self._last_matched_point = matchedSeg.p_start.copy()
+                                self._last_matched_point = map_match_result.snapped_pos.copy()
 
-                        diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
-                        if not matchedSeg.oneway:
-                            diff_rev = ((road_bearing_deg + 180.0 - curr_yaw_deg + 180) % 360) - 180
-                            # Only allow reverse snapping if we aren't completely drifted
-                            # or if the current heading definitely proves we are reversed.
-                            # During blackout, heading drift can exceed 90 deg!
-                            # Let's add a tighter continuity constraint using previous EKF state or just disable 180 snap if we assume cars don't U-turn abruptly.
-                            if abs(diff_rev) < abs(diff_fwd) and is_gnss_available:
-                                # When GNSS is available, trust the EKF heading.
-                                road_bearing_deg = (road_bearing_deg + 180.0) % 360.0
-                                diff_fwd = diff_rev
-                            elif abs(diff_rev) < abs(diff_fwd) and not is_gnss_available:
-                                # During blackout, only allow reverse flip if difference to previous heading is small?
-                                # EKF yaw is already corrupt! We shouldn't trust `curr_yaw_deg` to flip us 180 degrees.
-                                # Instead, rely on the map_matcher's transition probability or just force forward progress based on AI speed.
-                                # Let's NOT flip 180 degrees during GNSS blackout unless the vehicle is physically reversing (vt < 0).
-                                # Since AI speed is always positive, we assume forward travel.
-                                # DO NOT flip.
-                                pass
+                        if map_match_result.snapped:
+                            diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
+                            if not matchedSeg.oneway:
+                                diff_rev = ((road_bearing_deg + 180.0 - curr_yaw_deg + 180) % 360) - 180
+                                # Only allow reverse snapping if we aren't completely drifted
+                                # or if the current heading definitely proves we are reversed.
+                                # During blackout, heading drift can exceed 90 deg!
+                                # Let's add a tighter continuity constraint using previous EKF state or just disable 180 snap if we assume cars don't U-turn abruptly.
+                                if abs(diff_rev) < abs(diff_fwd) and is_gnss_available:
+                                    # When GNSS is available, trust the EKF heading.
+                                    road_bearing_deg = (road_bearing_deg + 180.0) % 360.0
+                                    diff_fwd = diff_rev
+                                elif abs(diff_rev) < abs(diff_fwd) and not is_gnss_available:
+                                    # During blackout, only allow reverse flip if difference to previous heading is small?
+                                    # EKF yaw is already corrupt! We shouldn't trust `curr_yaw_deg` to flip us 180 degrees.
+                                    # Instead, rely on the map_matcher's transition probability or just force forward progress based on AI speed.
+                                    # Let's NOT flip 180 degrees during GNSS blackout unless the vehicle is physically reversing (vt < 0).
+                                    # Since AI speed is always positive, we assume forward travel.
+                                    # DO NOT flip.
+                                    pass
 
-                        # Always update heading and cross-track, but adjust uncertainty based on alignment
-                        road_heading_rad = np.radians(road_bearing_deg)
-                        if not is_gnss_available:
-                            # Base uncertainty increases with misalignment, but cap at a reasonable value
-                            base_uncertainty_deg = 0.5 + 0.1 * abs(diff_fwd)  # degrees
-                            # Tighten heading uncertainty when map confidence is high
-                            conf_factor = max(map_match_result.confidence, 0.01)
-                            if conf_factor > 0.7:
-                                # Reduce cap from 5° to 3° when confidence > 0.7
-                                max_uncertainty_deg = 3.0
+                            # Always update heading and cross-track, but adjust uncertainty based on alignment
+                            road_heading_rad = np.radians(road_bearing_deg)
+                            if not is_gnss_available:
+                                # Base uncertainty increases with misalignment, but cap at a reasonable value
+                                base_uncertainty_deg = 0.5 + 0.1 * abs(diff_fwd)  # degrees
+                                # Tighten heading uncertainty when map confidence is high
+                                conf_factor = max(map_match_result.confidence, 0.01)
+                                if conf_factor > 0.7:
+                                    # Reduce cap from 5° to 3° when confidence > 0.7
+                                    max_uncertainty_deg = 3.0
+                                else:
+                                    max_uncertainty_deg = 5.0
+                                sigma_heading = np.radians(min(base_uncertainty_deg, max_uncertainty_deg))  # cap at configured max
                             else:
-                                max_uncertainty_deg = 5.0
-                            sigma_heading = np.radians(min(base_uncertainty_deg, max_uncertainty_deg))  # cap at configured max
-                        else:
-                            base_sigma = np.radians(1.5)
-                            conf = max(map_match_result.confidence, 0.01)
-                            sigma_heading = base_sigma / np.sqrt(conf)
-                            sigma_heading = max(sigma_heading, np.radians(0.1))
-                            sigma_heading = min(sigma_heading, np.radians(5.0))
+                                base_sigma = np.radians(1.5)
+                                conf = max(map_match_result.confidence, 0.01)
+                                sigma_heading = base_sigma / np.sqrt(conf)
+                                sigma_heading = max(sigma_heading, np.radians(0.1))
+                                sigma_heading = min(sigma_heading, np.radians(5.0))
 
-                        self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
-                        self.ekf.update_map_matching_cross_track(
-                            p_start_enu=matchedSeg.p_start,
-                            p_end_enu=matchedSeg.p_end,
-                            sigma_cross=sigma_cross,
-                            timestamp=timestamp
-                        )
+                            self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
+                            self.ekf.update_map_matching_cross_track(
+                                p_start_enu=matchedSeg.p_start,
+                                p_end_enu=matchedSeg.p_end,
+                                sigma_cross=sigma_cross,
+                                timestamp=timestamp
+                            )
                         if not is_gnss_available and int(round(timestamp*10)) % 50 == 0:
                             print(f"[{timestamp:.1f}] MM SNAPPED: seg={matchedSeg.segment_id}, p_est=({current_pos[0]:.1f}, {current_pos[1]:.1f}), p_proj=({map_match_result.snapped_pos[0]:.1f}, {map_match_result.snapped_pos[1]:.1f}), heading={current_heading_deg:.1f}, road_bearing={road_bearing_deg:.1f}")
                 else:
@@ -467,9 +456,10 @@ def evaluate_dead_reckoning_session(session_config):
     # Tighten map-matching parameters per vehicle type
     if veh_type == "two_wheeler":
         # Tighter parameters for two-wheelers to reduce heading ambiguity
-        fusion.map_matcher.search_radius = 80.0      # Reduced from 150m → 80m
-        fusion.map_matcher.heading_weight = 1.0      # Increased from 0.5 → 1.0 during blackout
-        fusion.map_matcher.max_deviation_m = 100.0   # Reduced from 150m → 100m
+        # Increase search radius slightly if it's missing the road entirely
+        fusion.map_matcher.search_radius = 120.0
+        fusion.map_matcher.heading_weight = 1.0
+        fusion.map_matcher.max_deviation_m = 100.0
     else:
         # Standard car parameters
         fusion.map_matcher.search_radius = 150.0
@@ -893,34 +883,37 @@ def generate_all_plots(drift_results, rate_results, transition_results):
     plt.close()
     print("Saved eval/plots/benchmark_drift_summary.png")
 
-    # 2. Car Trajectories (S4, S1, Vta26)
+    # 2. Car Trajectories
     car_res = [r for r in drift_results if r["category"] == "car"]
-    fig, axes = plt.subplots(1, len(car_res), figsize=(16, 5))
-    if len(car_res) == 1:
-        axes = [axes]
-    for ax, r in zip(axes, car_res):
-        gt = r["gt_traj"]
-        est = r["est_traj"]
-        s, e = r["outage_start"], r["outage_end"]
+    if len(car_res) > 0:
+        fig, axes = plt.subplots(1, len(car_res), figsize=(5 * len(car_res), 5))
+        if len(car_res) == 1:
+            axes = [axes]
+        for ax, r in zip(axes, car_res):
+            gt = r["gt_traj"]
+            est = r["est_traj"]
+            s, e = r["outage_start"], r["outage_end"]
 
-        ax.plot(gt[:, 0], gt[:, 1], 'k--', label="Ground Truth", alpha=0.7)
-        ax.plot(est[:s, 0], est[:s, 1], 'g-', label="GNSS-Aided", alpha=0.8)
-        ax.plot(est[s:e, 0], est[s:e, 1], 'r-', linewidth=2, label="60s Dead Reckoning")
-        ax.plot(est[e:, 0], est[e:, 1], 'b-', label="Post-Outage", alpha=0.8)
-        ax.plot(gt[s, 0], gt[s, 1], 'go', markersize=6, label="Outage Entry")
-        ax.plot(gt[e, 0], gt[e, 1], 'ro', markersize=6, label="Outage Exit")
+            ax.plot(gt[:, 0], gt[:, 1], 'k--', label="Ground Truth", alpha=0.7)
+            ax.plot(est[:s, 0], est[:s, 1], 'g-', label="GNSS-Aided", alpha=0.8)
+            ax.plot(est[s:e, 0], est[s:e, 1], 'r-', linewidth=2, label="60s Dead Reckoning")
+            ax.plot(est[e:, 0], est[e:, 1], 'b-', label="Post-Outage", alpha=0.8)
+            ax.plot(gt[s, 0], gt[s, 1], 'go', markersize=6, label="Outage Entry")
+            ax.plot(gt[e, 0], gt[e, 1], 'ro', markersize=6, label="Outage Exit")
 
-        ax.set_title(f"Car: {r['session']} (Drift: {r['drift_pct']:.1f}%)", fontweight="bold")
-        ax.set_xlabel("East (m)")
-        ax.set_ylabel("North (m)")
-        ax.grid(True, linestyle="--", alpha=0.5)
-        if ax == axes[0]:
-            ax.legend(loc="best", fontsize=8)
+            ax.set_title(f"Car: {r['session']} (Drift: {r['drift_pct']:.1f}%)", fontweight="bold")
+            ax.set_xlabel("East (m)")
+            ax.set_ylabel("North (m)")
+            ax.grid(True, linestyle="--", alpha=0.5)
+            if ax == axes[0]:
+                ax.legend(loc="best", fontsize=8)
 
-    plt.tight_layout()
-    plt.savefig("eval/plots/benchmark_car_trajectories.png", dpi=200)
-    plt.close()
-    print("Saved eval/plots/benchmark_car_trajectories.png")
+        plt.tight_layout()
+        plt.savefig("eval/plots/benchmark_car_trajectories.png", dpi=200)
+        plt.close()
+        print("Saved eval/plots/benchmark_car_trajectories.png")
+    else:
+        print("No car trajectories to plot.")
 
     # 3. Two-Wheeler Trajectories
     tw_res = [r for r in drift_results if r["category"] == "two_wheeler"]

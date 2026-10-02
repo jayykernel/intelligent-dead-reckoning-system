@@ -136,14 +136,22 @@ class HMMMapMatcher:
             # Check if they share end points (simple graph adjacency)
             # or if they belong to the same parent osm_way
             connected = (prev_seg.osm_way_id == curr_seg.osm_way_id or
-                         np.linalg.norm(prev_seg.p_start - curr_seg.p_start) < 2.0 or
-                         np.linalg.norm(prev_seg.p_end - curr_seg.p_start) < 2.0 or
-                         np.linalg.norm(prev_seg.p_start - curr_seg.p_end) < 2.0 or
-                         np.linalg.norm(prev_seg.p_end - curr_seg.p_end) < 2.0)
+                         np.linalg.norm(prev_seg.p_start - curr_seg.p_start) < 15.0 or
+                         np.linalg.norm(prev_seg.p_end - curr_seg.p_start) < 15.0 or
+                         np.linalg.norm(prev_seg.p_start - curr_seg.p_end) < 15.0 or
+                         np.linalg.norm(prev_seg.p_end - curr_seg.p_end) < 15.0)
             if not connected:
-                # Add a massive "jump penalty" (simulate having to drive around the block)
-                # Typically, topological distance >> euclidean distance if jumping.
-                d_route = d_route_euclidean + 500.0
+                # If jumping to an unconnected segment, add distance between closest endpoints
+                min_end_dist = min(
+                    np.linalg.norm(prev_seg.p_start - curr_seg.p_start),
+                    np.linalg.norm(prev_seg.p_end - curr_seg.p_start),
+                    np.linalg.norm(prev_seg.p_start - curr_seg.p_end),
+                    np.linalg.norm(prev_seg.p_end - curr_seg.p_end)
+                )
+                if min_end_dist > 30.0:
+                    d_route = d_route_euclidean + 30.0  # reasonable topological penalty
+                else:
+                    d_route = d_route_euclidean + min_end_dist
             else:
                 d_route = d_route_euclidean
         else:
@@ -265,16 +273,11 @@ class HMMMapMatcher:
         best_cand_id = max(curr_viterbi.keys(), key=lambda k: curr_viterbi[k])
         best_cand = next(c for c in current_candidates if id(c) == best_cand_id)
 
-        # Check if the best path's confidence has completely degraded
-        # (e.g. cumulative routing/topological jumps indicate off-road tracking)
-        if curr_viterbi[best_cand_id] < -40.0:  # Threshold for topological discontinuity
-            return MapMatchingResult(
-                raw_pos_enu=raw_pos_enu,
-                snapped_pos_enu=raw_pos_enu,
-                snapped=False,
-                confidence=0.0,
-                fallback_reason="TOPOLOGICAL_DISCONTINUITY"
-            )
+        # Check if all transition paths have degraded (e.g. tracking broke across a gap)
+        # Perform a soft reset using current emission probabilities to allow recovery
+        if curr_viterbi[best_cand_id] < -40.0:
+            best_cand = max(current_candidates, key=lambda c: c["emit_p"])
+            curr_viterbi = {id(c): np.log(max(1e-12, c["emit_p"])) for c in current_candidates}
 
 
         # Normalize viterbi to prevent underflow
