@@ -19,12 +19,14 @@ class MagnetometerGate:
         ref_field_strength: float = 48.0,  # Expected Earth geomagnetic field magnitude (uT)
         norm_tolerance: float = 15.0,       # Max allowed deviation from ref_strength (uT)
         gradient_threshold: float = 8.0,    # Max allowed step change between consecutive samples (uT)
-        window_size: int = 5                # Window for rolling variance / disturbance detection
+        window_size: int = 5,               # Window for rolling variance / disturbance detection
+        variance_threshold: float = 25.0    # Max allowed variance over window
     ):
         self.ref_field_strength = ref_field_strength
         self.norm_tolerance = norm_tolerance
         self.gradient_threshold = gradient_threshold
         self.window_size = window_size
+        self.variance_threshold = variance_threshold
 
         self.mag_history: List[np.ndarray] = []
         self.last_norm: Optional[float] = None
@@ -84,7 +86,7 @@ class MagnetometerGate:
         if len(self.mag_history) >= self.window_size:
             mats = np.array(self.mag_history)
             variance = np.sum(np.var(mats, axis=0))
-            if variance > 25.0:  # High local magnetic noise
+            if variance > self.variance_threshold:  # High local magnetic noise
                 self.is_disturbed = True
                 self.disturbance_reason = f"High local magnetic variance ({variance:.1f})"
                 debug["is_disturbed"] = True
