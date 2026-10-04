@@ -98,16 +98,44 @@ class MagnetometerGate:
         self.disturbance_reason = "CLEAN"
 
         # 4. Compute tilt-compensated magnetic heading in Nav frame (ENU)
-        # Rotate magnetic field vector into navigation frame: B_nav = R_veh_to_nav @ mag_veh
-        B_nav = R_veh_to_nav @ mag_veh
-        # B_nav = [B_East, B_North, B_Up]
-        # In ENU: Magnetic North is in the horizontal plane (East, North).
-        # Yaw angle psi (0 = East, pi/2 = North, or geographical heading):
-        # In standard ENU navigation frame:
-        # Geographic yaw psi = atan2(B_North, B_East) or geographical heading = atan2(B_East, B_North).
-        # In EKF yaw convention: psi = atan2(R[1,0], R[0,0]) where vehicle forward Y is aligned with Nav North/East.
-        # When vehicle Y points North (0 deg heading), B_veh points along Y.
-        # B_nav horizontal angle:
-        yaw_mag_rad = float(np.arctan2(B_nav[1], B_nav[0]))
+        # Key: R_veh_to_nav contains yaw drift. We must level mag_veh using ONLY
+        # pitch and roll from the attitude estimate (gravity-aligned), NOT yaw.
+        # Extract pitch and roll from R_veh_to_nav (or equivalent quaternion).
+        # R_veh_to_nav columns are vehicle axes in nav frame:
+        #   R[:,0] = vehicle X (right) in nav
+        #   R[:,1] = vehicle Y (forward) in nav
+        #   R[:,2] = vehicle Z (up) in nav
+        # The vehicle Z axis in nav frame (R[:,2]) is the gravity direction estimate.
+        # Its projection onto horizontal plane gives pitch/roll.
+        R = R_veh_to_nav
+        # Vehicle Z in nav frame
+        z_veh_nav = R[:, 2]
+        # Pitch = arcsin(-z_East), Roll = arctan2(z_North, z_Up)
+        pitch = float(np.arcsin(-z_veh_nav[0]))
+        roll = float(np.arctan2(z_veh_nav[1], z_veh_nav[2]))
+
+        # Build rotation matrix for pitch and roll only (yaw = 0)
+        cp, sp = np.cos(pitch), np.sin(pitch)
+        cr, sr = np.cos(roll), np.sin(roll)
+        R_level = np.array([
+            [cp, sp*sr, sp*cr],
+            [0, cr, -sr],
+            [-sp, cp*sr, cp*cr]
+        ])
+        # Alternatively, we can construct from pitch/roll directly:
+        # R_pitch_roll = R_z(0) @ R_y(pitch) @ R_x(roll)
+        # R_level = np.array([
+        #     [cp, sp*sr, sp*cr],
+        #     [0, cr, -sr],
+        #     [-sp, cp*sr, cp*cr]
+        # ])
+
+        # Level the magnetometer vector to horizontal plane
+        B_level = R_level @ mag_veh
+
+        # Geographic heading ψ (0 = North, +pi/2 = East) from horizontal components
+        # B_level,x = -B_N sinψ, B_level,y = B_N cosψ
+        # ψ = arctan2(-B_level,x, B_level,y)
+        yaw_mag_rad = float(np.arctan2(-B_level[0], B_level[1]))
 
         return True, yaw_mag_rad, debug
