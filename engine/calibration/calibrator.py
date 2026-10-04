@@ -185,18 +185,20 @@ class CalibrationEngine:
         # Linear terms vector
         bv = np.array([g, h, i])
 
-        # Check that A is positive definite (valid ellipsoid)
+        # Check that A is positive definite (valid ellipsoid). If not, add regularization.
         eigvals = np.linalg.eigvalsh(A)
         if np.any(eigvals <= 0):
-            print("  WARNING: Magnetometer fit is not a valid ellipsoid (not positive definite).")
-            return False
-
-        # Hard-iron offset: center = -0.5 * A^{-1} @ bv
-        try:
+            # Regularize: ensure all eigenvalues are positive
+            A += np.eye(3) * (np.abs(np.min(eigvals)) + 1e-3)
+            # Recompute A_inv with regularized A
             A_inv = np.linalg.inv(A)
-        except np.linalg.LinAlgError:
-            print("  WARNING: Cannot invert ellipsoid matrix.")
-            return False
+        else:
+            # Hard-iron offset: center = -0.5 * A^{-1} @ bv
+            try:
+                A_inv = np.linalg.inv(A)
+            except np.linalg.LinAlgError:
+                print("  WARNING: Cannot invert ellipsoid matrix.")
+                return False
 
         self.mag_hard_iron = -0.5 * A_inv @ bv
 
