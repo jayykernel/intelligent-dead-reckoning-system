@@ -42,7 +42,7 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         # Initialize road network and map matcher
         from engine.map_matching import RoadNetwork, HMMMapMatcher
         self.road_network = RoadNetwork(lat0=0.0, lon0=0.0)
-        self.map_matcher = HMMMapMatcher(self.road_network, vehicle_type="car")
+        self.map_matcher = HMMMapMatcher(self.road_network, vehicle_type=self.current_vehicle_type)
 
     def step(self,
              acc_raw: np.ndarray,
@@ -93,25 +93,49 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         else:
             self.current_lean_angle_rad = 0.0
 
-        is_stopped = self.constrained_ins._is_stopped(acc_veh, gyro_veh, v_veh, ai_speed=ai_speed)
+        # Compute yaw rate for use in map-matching gating
+        yaw_rate = abs(gyro_veh[2])
+
+        is_stopped = self.constrained_ins._is_stopped(
+            acc_veh, gyro_veh, v_veh, ai_speed=ai_speed, vehicle_type=self.current_vehicle_type
+        )
+
+        # Adaptive ZARU constraints for two-wheelers to mitigate vibration corruption
+        sigma_gyro_bias = 0.02
+        if self.current_vehicle_type == "two_wheeler":
+            # Two-wheelers have extreme vibration at low speeds/stops
+            if is_stopped:
+                sigma_gyro_bias = 1.0  # Large noise to effectively disable ZARU
+            else:
+                sigma_gyro_bias = 0.1  # Relax slightly during movement
+
         if is_stopped:
             self.ekf.update_zupt(
                 sigma_zupt=0.05,
                 alpha=0.01,
                 timestamp=timestamp
             )
-            self.ekf.update_zero_angular_rate(
-                gyro_veh=gyro_veh,
-                sigma_gyro_bias=0.02,
-                alpha=0.01,
-                timestamp=timestamp
-            )
+            # Skip ZARU for two-wheelers during stops to avoid vibration corrupting gyro bias
+            if self.current_vehicle_type != "two_wheeler":
+                self.ekf.update_zero_angular_rate(
+                    gyro_veh=gyro_veh,
+                    sigma_gyro_bias=sigma_gyro_bias,
+                    alpha=0.01,
+                    timestamp=timestamp
+                )
         else:
+            # Tighter NHC for two-wheelers when moving to constrain lateral drift
+            if self.current_vehicle_type == "two_wheeler":
+                sigma_nhc_x = 0.05  # Much tighter lateral constraint for motorcycles
+                sigma_nhc_z = 0.05
+            else:
+                sigma_nhc_x = 0.2
+                sigma_nhc_z = 0.2
             self.ekf.update_nhc(
                 vehicle_type=self.current_vehicle_type,
                 lean_angle_rad=self.current_lean_angle_rad,
-                sigma_nhc_x=0.2,
-                sigma_nhc_z=0.2,
+                sigma_nhc_x=sigma_nhc_x,
+                sigma_nhc_z=sigma_nhc_z,
                 alpha=0.01,
                 timestamp=timestamp
             )
@@ -119,14 +143,12 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         # Online Speed Scale Bias Learning (during GNSS-aided)
         if is_gnss_available and gnss_vel_enu is not None:
             speed_2d = float(np.linalg.norm(gnss_vel_enu[:2]))
-            # Calculate yaw rate to prevent calibrating scale factor inside sharp turns
-            # where centrifugal forces corrupt the AI speed output
-            yaw_rate = abs(gyro_veh[2])
-            min_speed = 2.0 if self.current_vehicle_type == "two_wheeler" else 5.0
+            # yaw_rate already computed above
+            min_speed = 3.0 if self.current_vehicle_type == "two_wheeler" else 5.0
             if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.1:
                 ratio = speed_2d / ai_speed
-                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.7
-                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 1.4
+                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.5
+                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 2.5
                 lr = 0.05 if getattr(self, '_speed_scale_updates', 0) < 20 else (0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005)
                 self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
                 self.speed_scale = (1.0 - lr) * getattr(self, 'speed_scale', 1.0) + lr * float(np.clip(ratio, clip_min, clip_max))
@@ -135,13 +157,17 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         if ai_speed is not None:
             # Apply online speed scale factor (k_v) learned during GNSS-aided driving
             # If two_wheeler, we rely heavily on the scale bias correction since the model is car-only
-            scaled_ai_speed = ai_speed * getattr(self, 'speed_scale', 1.0)
-            yaw_var_rad2 = float(self.ekf.P[8, 8])
-            sigma_ai_eff = sigma_ai * (1.0 + self.k * yaw_var_rad2)
+            if is_stopped:
+                scaled_ai_speed = 0.0
+                sigma_ai_eff = 0.05
+            else:
+                scaled_ai_speed = ai_speed * getattr(self, 'speed_scale', 1.0)
+                yaw_var_rad2 = float(self.ekf.P[8, 8])
+                sigma_ai_eff = sigma_ai * (1.0 + self.k * yaw_var_rad2)
 
-            # CRITICAL: During GNSS outage, hard-cap speed noise to ensure AI velocity is not ignored
-            if not is_gnss_available:
-                sigma_ai_eff = min(sigma_ai_eff, 0.8)
+                # CRITICAL: During GNSS outage, hard-cap speed noise to ensure AI velocity is not ignored
+                if not is_gnss_available:
+                    sigma_ai_eff = min(sigma_ai_eff, 0.8)
 
             self.ekf.update_ai_forward_speed(
                 speed_fwd=scaled_ai_speed,
@@ -154,6 +180,16 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         # Only inject if in PURE_DEAD_RECKONING (i.e., outage or GNSS untrusted)
         mag_used = False
         if mag_raw is not None:
+            # Dynamically adjust mag gate tolerances based on vehicle profile
+            if self.current_vehicle_type == "two_wheeler":
+                self.mag_gate.norm_tolerance = 25.0
+                self.mag_gate.gradient_threshold = 15.0
+                self.mag_gate.variance_threshold = 100.0
+            else:
+                self.mag_gate.norm_tolerance = 15.0
+                self.mag_gate.gradient_threshold = 8.0
+                self.mag_gate.variance_threshold = 25.0
+
             # Apply mag calibration (hard-iron / soft-iron)
             mag_cal = self.calib.apply_mag_calibration(mag_raw)
             # Rotate mag to vehicle frame
@@ -165,9 +201,14 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             if is_clean and mag_yaw is not None:
                 # Injection during GNSS outage
                 if not is_gnss_available:
-                    sigma_mag = np.radians(6.0)
-                    if getattr(self.calib, 'mag_is_calibrated', False):
-                        sigma_mag = np.radians(3.0 + 3.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5)))
+                    if self.current_vehicle_type == "two_wheeler":
+                        sigma_mag = np.radians(4.0)
+                        if getattr(self.calib, 'mag_is_calibrated', False):
+                            sigma_mag = np.radians(2.0 + 2.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5)))
+                    else:
+                        sigma_mag = np.radians(6.0)
+                        if getattr(self.calib, 'mag_is_calibrated', False):
+                            sigma_mag = np.radians(3.0 + 3.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5)))
 
                     self.ekf.update_heading(
                         heading_rad=mag_yaw,
@@ -280,14 +321,21 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                                 else:
                                     max_uncertainty_deg = 5.0
                                 sigma_heading = np.radians(min(base_uncertainty_deg, max_uncertainty_deg))  # cap at configured max
+
+                                # Gate map-matching heading updates during turns to prevent heading lock
+                                # Skip heading update when yaw rate is significant (indicates turning)
+                                if yaw_rate > 0.1:  # rad/s, turning threshold
+                                    # Skip heading update but still apply cross-track constraint
+                                    pass
+                                else:
+                                    self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
                             else:
                                 base_sigma = np.radians(1.5)
                                 conf = max(map_match_result.confidence, 0.01)
                                 sigma_heading = base_sigma / np.sqrt(conf)
                                 sigma_heading = max(sigma_heading, np.radians(0.1))
                                 sigma_heading = min(sigma_heading, np.radians(5.0))
-
-                            self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
+                                self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
                             self.ekf.update_map_matching_cross_track(
                                 p_start_enu=matchedSeg.p_start,
                                 p_end_enu=matchedSeg.p_end,
@@ -457,7 +505,7 @@ def evaluate_dead_reckoning_session(session_config):
     if veh_type == "two_wheeler":
         # Tighter parameters for two-wheelers to reduce heading ambiguity
         # Increase search radius slightly if it's missing the road entirely
-        fusion.map_matcher.search_radius = 120.0
+        fusion.map_matcher.search_radius = 80.0
         fusion.map_matcher.heading_weight = 1.0
         fusion.map_matcher.max_deviation_m = 100.0
     else:
