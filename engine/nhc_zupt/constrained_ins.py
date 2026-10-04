@@ -22,21 +22,32 @@ class ConstrainedINS:
         self.zupt_gyro_threshold = zupt_gyro_threshold
         self.g = 9.80665
 
-    def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray = None, ai_speed: float = None) -> bool:
+    def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray = None, ai_speed: float = None, vehicle_type: str = 'car') -> bool:
         """
         Detect if the vehicle is stationary based on specific force, gyro, current velocity, and ai_speed.
         """
-        if ai_speed is not None and ai_speed > 0.5:
+        if ai_speed is not None and ai_speed > 0.5 and vehicle_type != 'two_wheeler':
             return False
 
         acc_mag = np.linalg.norm(acc_veh)
         gyro_mag = np.linalg.norm(gyro_veh)
 
-        imu_quiet = (abs(acc_mag - self.g) < self.zupt_acc_threshold) and (gyro_mag < self.zupt_gyro_threshold)
+        # For two-wheelers, engine idling vibration causes large acc/gyro noise,
+        # so we relax the threshold significantly to ensure it ZUPTs when stopped.
+        if vehicle_type == 'two_wheeler':
+            acc_thresh = 2.0  # 2.0 m/s^2 vibration is common for a stopped motorcycle
+            gyro_thresh = 0.5 # 0.5 rad/s vibration is common
+        else:
+            acc_thresh = self.zupt_acc_threshold
+            gyro_thresh = self.zupt_gyro_threshold
+
+        imu_quiet = (abs(acc_mag - self.g) < acc_thresh) and (gyro_mag < gyro_thresh)
 
         if v_veh is not None:
             v_mag = np.linalg.norm(v_veh)
-            return imu_quiet and (v_mag < self.zupt_speed_threshold)
+            # Relax the velocity check for two-wheeler as well
+            v_thresh = self.zupt_speed_threshold if vehicle_type != 'two_wheeler' else 1.5
+            return imu_quiet and (v_mag < v_thresh)
 
         return imu_quiet
 
