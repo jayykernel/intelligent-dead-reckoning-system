@@ -26,40 +26,23 @@ class LeanAngleEKF:
         # Design a second-order notch filter at 15 Hz with Q-factor of 5
         self.notch_freq = 15.0  # Hz
         self.notch_q = 5.0      # Quality factor
-        self.notch_b, self.notch_a = self._design_notch_filter(dt)
-        self.notch_state = np.zeros(2)  # For direct form II implementation
-
-    def _design_notch_filter(self, dt: float):
-        """Design a second-order notch filter for removing engine vibration."""
-        fs = 1.0 / dt  # Sampling frequency
-        f0 = self.notch_freq / (fs / 2.0)  # Normalized frequency
-        bw = f0 / self.notch_q  # Bandwidth
-
-        # Second-order notch filter coefficients
-        b0 = 1.0
-        b1 = -2.0 * np.cos(2.0 * np.pi * f0)
-        b2 = 1.0
-        a0 = 1.0 + 2.0 * np.cos(2.0 * np.pi * f0) / (2.0 * self.notch_q)
-        a1 = -2.0 * np.cos(2.0 * np.pi * f0)
-        a2 = 1.0 - 2.0 * np.cos(2.0 * np.pi * f0) / (2.0 * self.notch_q)
-
-        # Normalize
-        b = np.array([b0, b1, b2]) / a0
-        a = np.array([1.0, a1/a0, a2/a0])
-        return b, a
+        fs = 1.0 / dt
+        if fs > 2.0 * self.notch_freq:
+            self.notch_b, self.notch_a = signal.iirnotch(self.notch_freq, self.notch_q, fs)
+            self.notch_state = signal.lfilter_zi(self.notch_b, self.notch_a) * 0.0
+            self._use_notch = True
+        else:
+            self._use_notch = False
+        self.last_filtered_acc_x = 0.0
 
     def _apply_notch_filter(self, acc_x: float) -> float:
         """Apply notch filter to remove engine vibration from lateral acceleration."""
-        # Direct Form II implementation
-        x = np.array([acc_x, 0.0, 0.0])
-        y = np.dot(self.notch_b, x) - np.dot(self.notch_a[1:], self.notch_state)
-
-        # Update state
-        self.notch_state[1] = self.notch_state[0]
-        self.notch_state[0] = y
-
-        self.last_filtered_acc_x = y
-        return y
+        if not getattr(self, '_use_notch', False):
+            self.last_filtered_acc_x = acc_x
+            return acc_x
+        y, self.notch_state = signal.lfilter(self.notch_b, self.notch_a, [acc_x], zi=self.notch_state)
+        self.last_filtered_acc_x = float(y[0])
+        return float(y[0])
 
     def predict(self, gyro_y: float):
         """

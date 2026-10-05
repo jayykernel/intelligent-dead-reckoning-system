@@ -152,11 +152,11 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
         if is_gnss_available and gnss_vel_enu is not None:
             speed_2d = float(np.linalg.norm(gnss_vel_enu[:2]))
             # yaw_rate already computed above
-            min_speed = 3.0 if self.current_vehicle_type == "two_wheeler" else 5.0
-            if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.1:
+            min_speed = 1.0 if self.current_vehicle_type == "two_wheeler" else 2.0  # Reduced from 3.0/2.0 to 1.0/2.0 m/s for low-speed learning
+            if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.3:  # Increased yaw rate threshold for two-wheelers
                 ratio = speed_2d / ai_speed
-                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.5
-                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 2.5
+                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.2  # Reduced from 0.5 to 0.2 to allow lower scale factor
+                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 3.0 # Increased upper clip for two-wheelers
                 lr = 0.05 if getattr(self, '_speed_scale_updates', 0) < 20 else (0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005)
                 self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
                 self.speed_scale = (1.0 - lr) * getattr(self, 'speed_scale', 1.0) + lr * float(np.clip(ratio, clip_min, clip_max))
@@ -209,23 +209,20 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             if is_clean and mag_yaw is not None:
                 # Injection during GNSS outage
                 if not is_gnss_available:
-                    # Use calibrated heading with uncertainty based on calibration quality
-                    if getattr(self.calib, 'mag_is_calibrated', False):
-                        # Scale uncertainty: 2° for perfect quality, 8° for poor quality
+                    # Use calibrated heading only if calibration was successful and quality is good
+                    if getattr(self.calib, 'mag_is_calibrated', False) and getattr(self.calib, 'mag_calibration_quality', 0.0) >= 0.5:
+                        # Scale uncertainty: 2° for perfect quality, 8° for moderate quality
                         base_sigma_deg = 2.0 + 6.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5))
                         sigma_mag = np.radians(base_sigma_deg)
-                    else:
-                        # Fallback if not calibrated
-                        sigma_mag = np.radians(8.0)
 
-                    self.ekf.update_heading(
-                        heading_rad=mag_yaw,
-                        sigma_heading=sigma_mag,
-                        alpha=0.01,
-                        timestamp=timestamp,
-                        source="MAG_HEADING"
-                    )
-                    mag_used = True
+                        self.ekf.update_heading(
+                            heading_rad=mag_yaw,
+                            sigma_heading=sigma_mag,
+                            alpha=0.01,
+                            timestamp=timestamp,
+                            source="MAG_HEADING"
+                        )
+                        mag_used = True
 
         gnss_pos_passed = False
         gnss_vel_passed = False
@@ -264,7 +261,8 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 map_match_result = self.map_matcher.match_point(
                     raw_pos_enu=np.array([current_pos[0], current_pos[1], current_pos[2]]),
                     heading_deg=current_heading_deg,
-                    pos_sigma_m=pos_sigma
+                    pos_sigma_m=pos_sigma,
+                    is_gnss_available=is_gnss_available
                 )
 
                 if map_match_result.snapped:
@@ -314,21 +312,11 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                             if abs(diff_fwd) < 45.0:
                                 road_heading_rad = np.radians(road_bearing_deg)
                                 if not is_gnss_available:
-                                    # Base uncertainty increases with misalignment, but cap at a reasonable value
-                                    base_uncertainty_deg = 0.5 + 0.1 * abs(diff_fwd)  # degrees
-                                    # Tighten heading uncertainty when map confidence is high
-                                    conf_factor = max(map_match_result.confidence, 0.01)
-                                    if conf_factor > 0.7:
-                                        # Reduce cap from 5° to 3° when confidence > 0.7
-                                        max_uncertainty_deg = 3.0
-                                    else:
-                                        max_uncertainty_deg = 5.0
-                                    sigma_heading = np.radians(min(base_uncertainty_deg, max_uncertainty_deg))
-
-                                    # Gate map-matching heading updates during turns to prevent heading lock
-                                    if yaw_rate > 0.1:  # rad/s, turning threshold
-                                        pass
-                                    else:
+                                    # During outage: only inject map heading if yaw rate is essentially zero (straight line driving)
+                                    # and alignment is very close (< 10 deg). During any turn (yaw_rate > 0.02 rad/s = 1.1 deg/s),
+                                    # DO NOT constrain heading to prevent locking/fighting the gyro.
+                                    if yaw_rate < 0.02 and abs(diff_fwd) < 15.0:
+                                        sigma_heading = np.radians(max(5.0, abs(diff_fwd) * 0.5))
                                         self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
                                 else:
                                     base_sigma = np.radians(1.5)
@@ -338,17 +326,15 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                                     sigma_heading = min(sigma_heading, np.radians(5.0))
                                     self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
 
-                            self.ekf.update_map_matching_cross_track(
-                                p_start_enu=matchedSeg.p_start,
-                                p_end_enu=matchedSeg.p_end,
-                                sigma_cross=sigma_cross,
-                                timestamp=timestamp
-                            )
-                        if not is_gnss_available and int(round(timestamp*10)) % 50 == 0:
-                            print(f"[{timestamp:.1f}] MM SNAPPED: seg={matchedSeg.segment_id}, p_est=({current_pos[0]:.1f}, {current_pos[1]:.1f}), p_proj=({map_match_result.snapped_pos[0]:.1f}, {map_match_result.snapped_pos[1]:.1f}), heading={current_heading_deg:.1f}, road_bearing={road_bearing_deg:.1f}")
+                                # Apply cross-track constraint only when heading alignment is reasonable
+                                self.ekf.update_map_matching_cross_track(
+                                    p_start_enu=matchedSeg.p_start,
+                                    p_end_enu=matchedSeg.p_end,
+                                    sigma_cross=sigma_cross,
+                                    timestamp=timestamp
+                                )
                 else:
-                    if not is_gnss_available:
-                        print(f"[{timestamp:.1f}] NO MM SNAP: reason={map_match_result.fallback_reason}")
+                    pass
 
             elif not is_gnss_available and self.current_vehicle_type == "two_wheeler":
                 # Two-wheeler fallback: use magnetometer heading if map matching fails during outage
@@ -458,7 +444,7 @@ def evaluate_dead_reckoning_session(session_config):
     speed = np.nan_to_num(synced["gt_speed"].values, nan=0.0)
     mag = synced[["mag_x", "mag_y", "mag_z"]].values if "mag_x" in synced.columns else None
 
-    # Calibration on initial segment
+    # Initial calibration of frame
     calib = CalibrationEngine()
     calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=dt)
 

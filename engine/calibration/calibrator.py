@@ -23,6 +23,8 @@ class CalibrationEngine:
         self.gyro_bias = np.zeros(3)
         self.accel_bias = np.zeros(3)
         self.R_phone_to_veh = np.eye(3)
+        self.gyro_permutation = (0, 1, 2)  # (x, y, z) default
+        self.gyro_signs = (1, 1, 1)        # (x, y, z) signs
 
         self.is_calibrated = False
         self.alignment_score = 0.0
@@ -32,6 +34,11 @@ class CalibrationEngine:
         self.mag_soft_iron = np.eye(3)         # Soft-iron correction matrix
         self.mag_is_calibrated = False
         self.mag_calibration_quality = 0.0     # 0.0 to 1.0
+
+    def set_gyro_alignment(self, permutation: Tuple[int, int, int], signs: Tuple[int, int, int]):
+        """Set dynamic gyro axis permutation and sign inversion."""
+        self.gyro_permutation = permutation
+        self.gyro_signs = signs
 
     def calibrate_from_session(self, acc: np.ndarray, gyro: np.ndarray, speed: np.ndarray, dt: float = 0.1) -> bool:
         """
@@ -157,6 +164,12 @@ class CalibrationEngine:
         # Linearised: a*x^2 + b*y^2 + c*z^2 + d*xy + e*xz + f*yz + g*x + h*y + i*z = 1
         x, y, z = mag_clean[:, 0], mag_clean[:, 1], mag_clean[:, 2]
 
+        # Check spatial excitation: need reasonable spread across at least 2 axes
+        spread_xyz = np.ptp(mag_clean, axis=0)
+        if np.sum(spread_xyz > 15.0) < 2:
+            print(f"  WARNING: Magnetometer data lacks angular excitation (spread={spread_xyz}). Calibration skipped.")
+            return False
+
         D = np.column_stack([
             x**2, y**2, z**2,
             2*x*y, 2*x*z, 2*y*z,
@@ -185,20 +198,18 @@ class CalibrationEngine:
         # Linear terms vector
         bv = np.array([g, h, i])
 
-        # Check that A is positive definite (valid ellipsoid). If not, add regularization.
+        # Check that A is positive definite (valid ellipsoid). If not, reject fit.
         eigvals = np.linalg.eigvalsh(A)
         if np.any(eigvals <= 0):
-            # Regularize: ensure all eigenvalues are positive
-            A += np.eye(3) * (np.abs(np.min(eigvals)) + 1e-3)
-            # Recompute A_inv with regularized A
+            print("  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).")
+            return False
+
+        # Hard-iron offset: center = -0.5 * A^{-1} @ bv
+        try:
             A_inv = np.linalg.inv(A)
-        else:
-            # Hard-iron offset: center = -0.5 * A^{-1} @ bv
-            try:
-                A_inv = np.linalg.inv(A)
-            except np.linalg.LinAlgError:
-                print("  WARNING: Cannot invert ellipsoid matrix.")
-                return False
+        except np.linalg.LinAlgError:
+            print("  WARNING: Cannot invert ellipsoid matrix.")
+            return False
 
         self.mag_hard_iron = -0.5 * A_inv @ bv
 
@@ -245,11 +256,12 @@ class CalibrationEngine:
         """
         Apply calibration and rotation to turn raw phone IMU into vehicle-frame IMU.
         """
-        # Rotate gyro to vehicle frame
+        # 1. Rotate gyro to vehicle frame
+        # Apply bias correction in the raw frame FIRST
         gyro_corrected = gyro - self.gyro_bias
         gyro_veh = gyro_corrected @ self.R_phone_to_veh.T
 
-        # Rotate raw acc to vehicle frame first
+        # 2. Rotate raw acc to vehicle frame first
         acc_veh = acc @ self.R_phone_to_veh.T
         # Subtract accel_bias which is defined in Vehicle Frame
         acc_veh = acc_veh - self.accel_bias
