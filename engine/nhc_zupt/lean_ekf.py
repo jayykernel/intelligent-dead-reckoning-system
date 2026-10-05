@@ -58,6 +58,7 @@ class LeanAngleEKF:
         self.notch_state[1] = self.notch_state[0]
         self.notch_state[0] = y
 
+        self.last_filtered_acc_x = y
         return y
 
     def predict(self, gyro_y: float):
