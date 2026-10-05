@@ -99,43 +99,47 @@ class MagnetometerGate:
 
         # 4. Compute tilt-compensated magnetic heading in Nav frame (ENU)
         # Key: R_veh_to_nav contains yaw drift. We must level mag_veh using ONLY
-        # pitch and roll from the attitude estimate (gravity-aligned), NOT yaw.
-        # Extract pitch and roll from R_veh_to_nav (or equivalent quaternion).
-        # R_veh_to_nav columns are vehicle axes in nav frame:
-        #   R[:,0] = vehicle X (right) in nav
-        #   R[:,1] = vehicle Y (forward) in nav
-        #   R[:,2] = vehicle Z (up) in nav
-        # The vehicle Z axis in nav frame (R[:,2]) is the gravity direction estimate.
-        # Its projection onto horizontal plane gives pitch/roll.
-        R = R_veh_to_nav
-        # Vehicle Z in nav frame
-        z_veh_nav = R[:, 2]
-        # Pitch = arcsin(-z_East), Roll = arctan2(z_North, z_Up)
-        pitch = float(np.arcsin(-z_veh_nav[0]))
-        roll = float(np.arctan2(z_veh_nav[1], z_veh_nav[2]))
+        # the gravity direction from the attitude estimate, completely independent of yaw.
+        #
+        # In vehicle frame, the unit Up vector (opposite to gravity) is Row 2 of R_veh_to_nav:
+        # u_veh = R_veh_to_nav^T @ [0, 0, 1]^T = [R[2,0], R[2,1], R[2,2]]^T
+        # Row 2 of R_veh_to_nav = R_z(yaw) @ R_tilt has ZERO dependence on yaw.
+        u_veh = R_veh_to_nav[2, :].copy()
+        u_norm = np.linalg.norm(u_veh)
+        if u_norm < 1e-6:
+            u_veh = np.array([0.0, 0.0, 1.0])
+        else:
+            u_veh = u_veh / u_norm
 
-        # Build rotation matrix for pitch and roll only (yaw = 0)
-        cp, sp = np.cos(pitch), np.sin(pitch)
-        cr, sr = np.cos(roll), np.sin(roll)
-        R_level = np.array([
-            [cp, sp*sr, sp*cr],
-            [0, cr, -sr],
-            [-sp, cp*sr, cp*cr]
-        ])
-        # Alternatively, we can construct from pitch/roll directly:
-        # R_pitch_roll = R_z(0) @ R_y(pitch) @ R_x(roll)
-        # R_level = np.array([
-        #     [cp, sp*sr, sp*cr],
-        #     [0, cr, -sr],
-        #     [-sp, cp*sr, cp*cr]
-        # ])
+        # Project vehicle forward axis Y_veh = [0, 1, 0] onto horizontal plane (orthogonal to u_veh)
+        u_y = u_veh[1]
+        y_proj = np.array([-u_y * u_veh[0], 1.0 - u_y**2, -u_y * u_veh[2]])
+        y_norm = np.linalg.norm(y_proj)
+        if y_norm < 1e-6:
+            # Vehicle pointing straight up/down (gimbal lock fallback)
+            y_level = np.array([0.0, 1.0, 0.0])
+        else:
+            y_level = y_proj / y_norm
+
+        # Leveled X axis (Right) = Y_level x Z_level (u_veh)
+        x_level = np.cross(y_level, u_veh)
+        x_norm = np.linalg.norm(x_level)
+        if x_norm > 1e-6:
+            x_level = x_level / x_norm
+
+        # Rotation matrix from vehicle frame to leveled horizontal frame:
+        # Rows are the leveled basis vectors in vehicle coordinates
+        R_veh_to_level = np.vstack([x_level, y_level, u_veh])
 
         # Level the magnetometer vector to horizontal plane
-        B_level = R_level @ mag_veh
+        B_level = R_veh_to_level @ mag_veh
 
-        # Geographic heading ψ (0 = North, +pi/2 = East) from horizontal components
-        # B_level,x = -B_N sinψ, B_level,y = B_N cosψ
-        # ψ = arctan2(-B_level,x, B_level,y)
+        # Geographic heading psi (0 = North, +pi/2 = East) from horizontal components:
+        # In ENU, Earth B points North (B_E = 0, B_N > 0).
+        # When vehicle faces heading psi:
+        # B_level,y (forward) = B_N cos(psi)
+        # B_level,x (right)   = -B_N sin(psi)
+        # Therefore: psi = atan2(-B_level,x, B_level,y)
         yaw_mag_rad = float(np.arctan2(-B_level[0], B_level[1]))
 
         return True, yaw_mag_rad, debug

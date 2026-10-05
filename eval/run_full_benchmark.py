@@ -209,14 +209,14 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             if is_clean and mag_yaw is not None:
                 # Injection during GNSS outage
                 if not is_gnss_available:
-                    if self.current_vehicle_type == "two_wheeler":
-                        sigma_mag = np.radians(4.0)
-                        if getattr(self.calib, 'mag_is_calibrated', False):
-                            sigma_mag = np.radians(2.0 + 2.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5)))
+                    # Use calibrated heading with uncertainty based on calibration quality
+                    if getattr(self.calib, 'mag_is_calibrated', False):
+                        # Scale uncertainty: 2° for perfect quality, 8° for poor quality
+                        base_sigma_deg = 2.0 + 6.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5))
+                        sigma_mag = np.radians(base_sigma_deg)
                     else:
-                        sigma_mag = np.radians(6.0)
-                        if getattr(self.calib, 'mag_is_calibrated', False):
-                            sigma_mag = np.radians(3.0 + 3.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5)))
+                        # Fallback if not calibrated
+                        sigma_mag = np.radians(8.0)
 
                     self.ekf.update_heading(
                         heading_rad=mag_yaw,
@@ -288,9 +288,10 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                                 dt_since_last = timestamp - getattr(self, '_last_matched_time', timestamp - self.dt)
                                 actual_along_track = np.linalg.norm(map_match_result.snapped_pos - self._last_matched_point)
                                 expected_along_track = ai_speed * getattr(self, 'speed_scale', 1.0) * dt_since_last
-                                # Reject if actual deviates > 2x from expected (or minimum 5m slack)
-                                max_allowed_jump = max(5.0, expected_along_track * 2.0 + 3.0)
-                                if actual_along_track > max_allowed_jump and dt_since_last < 5.0:
+                                # Reject if actual deviates > 1.5x from expected (tightened from 2x)
+                                # with minimum 3m slack (reduced from 5m)
+                                max_allowed_jump = max(3.0, expected_along_track * 1.5 + 1.0)
+                                if actual_along_track > max_allowed_jump and dt_since_last < 10.0:
                                     map_match_result.snapped = False
                                     map_match_result.fallback_reason = "ALONG_TRACK_CONSTRAINT_VIOLATION"
                                 else:
@@ -422,7 +423,7 @@ def build_gt_road_network(e_gt, n_gt, target_segment_length_m=10.0):
         dist = np.linalg.norm(p_curr - p_last)
         if dist >= target_segment_length_m or i == len(e_gt) - 1:
             if dist >= 0.5:
-                rn.segments.append(RoadSegment(seg_id, 1000 + seg_id, np.array([p_last[0], p_last[1], 0.0]), np.array([p_curr[0], p_curr[1], 0.0]), oneway=True))
+                rn.segments.append(RoadSegment(seg_id, 1000 + seg_id, np.array([p_last[0], p_last[1], 0.0]), np.array([p_curr[0], p_curr[1], 0.0]), oneway=False))
                 seg_id += 1
                 p_last = p_curr
 
@@ -501,19 +502,6 @@ def evaluate_dead_reckoning_session(session_config):
 
     fusion.road_network = rn
     fusion.map_matcher = HMMMapMatcher(rn, vehicle_type=veh_type)
-
-    # Tighten map-matching parameters per vehicle type
-    if veh_type == "two_wheeler":
-        # Tighter parameters for two-wheelers to reduce heading ambiguity
-        # Slightly wider search radius to accommodate lane changes/weaving
-        fusion.map_matcher.search_radius = 120.0
-        fusion.map_matcher.heading_weight = 0.8  # Strict heading alignment during blackout
-        fusion.map_matcher.max_deviation_m = 80.0
-    else:
-        # Standard car parameters
-        fusion.map_matcher.search_radius = 150.0
-        fusion.map_matcher.heading_weight = 1.0
-        fusion.map_matcher.max_deviation_m = 150.0
 
     print(f"  Road Network loaded: {len(rn.segments)} segments (synthetic={getattr(rn, 'is_synthetic', rn is not temp_rn if 'temp_rn' in locals() else True)})")
 
