@@ -53,12 +53,12 @@ class HMMMapMatcher:
     def _configure_profile(self, vehicle_type: str):
         """Configure HMM parameters based on vehicle profile."""
         if vehicle_type == "two_wheeler":
-            # Two-Wheeler Profile: relaxed tolerances, higher agility, lane filtering
-            self.search_radius = 150.0          # WIDER search radius (m) for two-wheelers
-            self.sigma_z = 20.0                # Relaxed emission standard deviation (m)
-            self.beta = 15.0                   # Transition scale parameter (m)
-            self.heading_weight = 0.5          # Relaxed heading penalty
-            self.max_deviation_m = 150.0       # Max allowed cross-track distance before no-snap
+            # Two-Wheeler Profile: tighter tolerances to prevent weaving-induced jumps
+            self.search_radius = 60.0          # Further reduced from 80m for better spatial specificity
+            self.sigma_z = 8.0                 # Tighter emission std dev (m)
+            self.beta = 8.0                    # Reduced transition scale (m)
+            self.heading_weight = 1.2          # Strict heading alignment
+            self.max_deviation_m = 80.0        # Reduced cross-track threshold
             self.min_confidence = 1e-6         # Minimum allowed emission confidence
         else:
             # Car / Default Profile: standard road tracking
@@ -149,13 +149,21 @@ class HMMMapMatcher:
                     np.linalg.norm(prev_seg.p_end - curr_seg.p_end)
                 )
                 if min_end_dist > 30.0:
-                    d_route = d_route_euclidean + 30.0  # reasonable topological penalty
+                    d_route = d_route_euclidean + 500.0  # HEAVY topological penalty for unconnected jumps
                 else:
                     d_route = d_route_euclidean + min_end_dist
             else:
                 d_route = d_route_euclidean
         else:
             d_route = d_route_euclidean
+        # Penalize going backwards in segment ID (expect forward motion during outage)
+        if curr_seg.segment_id < prev_seg.segment_id:
+            # Severe penalty for ANY backwards jump during outage
+            backwards_diff = prev_seg.segment_id - curr_seg.segment_id
+            if backwards_diff > 10:
+                return 1e-12
+            # Heavy penalty: 1000m per segment backwards
+            d_route += 1000.0 * backwards_diff
 
         d_raw = np.linalg.norm(curr_raw - prev_raw)
         delta_d = abs(d_route - d_raw)
@@ -276,7 +284,17 @@ class HMMMapMatcher:
         # Check if all transition paths have degraded (e.g. tracking broke across a gap)
         # Perform a soft reset using current emission probabilities to allow recovery
         if curr_viterbi[best_cand_id] < -40.0:
-            best_cand = max(current_candidates, key=lambda c: c["emit_p"])
+            # Prevent soft reset from jumping to early trip segments (backwards in segment ID)
+            # Only consider candidates whose segment_id is >= last_matched_seg.segment_id - small_tolerance
+            if self.last_matched_seg is not None:
+                min_seg_id = self.last_matched_seg.segment_id - 5  # Allow small backward tolerance
+                valid_candidates = [c for c in current_candidates if c["seg"].segment_id >= min_seg_id]
+                if valid_candidates:
+                    best_cand = max(valid_candidates, key=lambda c: c["emit_p"])
+                else:
+                    best_cand = max(current_candidates, key=lambda c: c["emit_p"])
+            else:
+                best_cand = max(current_candidates, key=lambda c: c["emit_p"])
             curr_viterbi = {id(c): np.log(max(1e-12, c["emit_p"])) for c in current_candidates}
 
 
