@@ -63,10 +63,10 @@ class HMMMapMatcher:
         else:
             # Car / Default Profile: standard road tracking
             self.search_radius = 80.0          # Expanded search radius (m) for GNSS outages
-            self.sigma_z = 10.0                # Standard emission std dev (m)
-            self.beta = 10.0                   # Standard transition scale (m)
-            self.heading_weight = 4.0          # Increased heading weight for stronger alignment penalty
-            self.max_deviation_m = 100.0       # Expanded cross-track threshold
+            self.sigma_z = 8.0                 # Tighter emission std dev (m)
+            self.beta = 8.0                    # Tighter transition scale (m)
+            self.heading_weight = 6.0          # Increased heading weight for stronger alignment penalty
+            self.max_deviation_m = 80.0        # Expanded cross-track threshold
             self.min_confidence = 1e-5         # Minimum confidence
 
     def set_vehicle_type(self, vehicle_type: str):
@@ -102,15 +102,15 @@ class HMMMapMatcher:
             if not seg.oneway:
                 # Can travel in reverse bearing
                 rev_diff = abs((heading_deg - (seg.bearing_deg + 180.0) + 180.0) % 360.0 - 180.0)
-                # Only use reverse bearing if GNSS is available, to avoid snapping backwards during outage drift
                 if is_gnss_available:
                     angle_diff = min(angle_diff, rev_diff)
                 else:
                     # During outage, we must preserve the forward heading assumption
                     angle_diff = min(angle_diff, rev_diff) if rev_diff < 40.0 and abs(angle_diff) > 90.0 else angle_diff
 
-            # Hard heading gate: reject if heading difference too large
-            if angle_diff > 40.0:
+            # Hard heading gate to reject orthogonal cross-street candidates
+            heading_limit = 40.0
+            if angle_diff > heading_limit:
                 return 1e-12
 
             # Soft penalty for heading mismatch

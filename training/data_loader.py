@@ -119,9 +119,9 @@ def preprocess_session(
         'acc_x': acc_x,
         'acc_y': acc_y,
         'acc_z': acc_z,
-        'gyro_x': gyro_pitch,   # Angular rate X
-        'gyro_y': gyro_roll,    # Angular rate Y
-        'gyro_z': gyro_yaw,     # Angular rate Z
+        'gyro_x': gyro_yaw,    # Mapping based on correlation analysis
+        'gyro_y': gyro_roll,   # Mapping based on correlation analysis
+        'gyro_z': gyro_pitch,  # Pitch column correlates with yaw rate
         'mag_x': mag_x,
         'mag_y': mag_y,
         'mag_z': mag_z,

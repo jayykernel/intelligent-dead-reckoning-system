@@ -264,6 +264,7 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                     pos_sigma_m=pos_sigma,
                     is_gnss_available=is_gnss_available
                 )
+                self._last_map_match = map_match_result
 
                 if map_match_result.snapped:
                     matchedSeg = self.map_matcher.last_matched_seg
@@ -312,11 +313,18 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                             if abs(diff_fwd) < 45.0:
                                 road_heading_rad = np.radians(road_bearing_deg)
                                 if not is_gnss_available:
-                                    # During outage: only inject map heading if yaw rate is essentially zero (straight line driving)
-                                    # and alignment is very close (< 10 deg). During any turn (yaw_rate > 0.02 rad/s = 1.1 deg/s),
-                                    # DO NOT constrain heading to prevent locking/fighting the gyro.
-                                    if yaw_rate < 0.02 and abs(diff_fwd) < 15.0:
-                                        sigma_heading = np.radians(max(5.0, abs(diff_fwd) * 0.5))
+                                    # During outage: inject map heading even during turns to prevent yaw divergence
+                                    # Scale sigma with yaw rate: high yaw rate = trust gyro more (larger map sigma)
+                                    base_head_sigma_deg = 5.0
+                                    dynamic_head_sigma_deg = max(base_head_sigma_deg, abs(diff_fwd) * 0.5)
+                                    # Inflate sigma based on yaw rate (e.g. 0.1 rad/s -> +5 degrees sigma)
+                                    if yaw_rate >= 0.02:
+                                        dynamic_head_sigma_deg += abs(yaw_rate) * 50.0
+
+                                    dynamic_head_sigma_deg = min(dynamic_head_sigma_deg, 30.0)
+
+                                    if abs(diff_fwd) < 35.0:
+                                        sigma_heading = np.radians(dynamic_head_sigma_deg)
                                         self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
                                 else:
                                     base_sigma = np.radians(1.5)
