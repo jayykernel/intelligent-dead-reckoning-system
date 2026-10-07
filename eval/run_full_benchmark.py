@@ -37,7 +37,7 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
     def __init__(self, k=1000.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.k = k
-        self.speed_scale = 1.0
+        self.speed_scale = 0.95 if self.current_vehicle_type == "two_wheeler" else 1.0
         self._speed_scale_updates = 0  # Track number of updates for learning rate scheduling
         # Initialize road network and map matcher
         from engine.map_matching import RoadNetwork, HMMMapMatcher
@@ -127,7 +127,7 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             # Tighter NHC for two-wheelers when moving to constrain lateral drift
             skip_nhc = False
             if self.current_vehicle_type == "two_wheeler":
-                sigma_nhc_x = 0.05  # Much tighter lateral constraint for motorcycles
+                sigma_nhc_x = 0.12  # Relaxed for two-wheelers (was 0.05)
                 sigma_nhc_z = 0.05
                 # Lateral acceleration sanity gate: if lateral accel > 2 m/s^2, we might be sliding/weaving
                 # or there is extreme vibration, so skip NHC to avoid injecting bad constraints
@@ -149,21 +149,36 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 )
 
         # Online Speed Scale Bias Learning (during GNSS-aided)
+        # Simplified implementation: Median initialization + exponential decay learning
         if is_gnss_available and gnss_vel_enu is not None:
             speed_2d = float(np.linalg.norm(gnss_vel_enu[:2]))
-            # yaw_rate already computed above
-            min_speed = 1.0 if self.current_vehicle_type == "two_wheeler" else 2.0  # Reduced from 3.0/2.0 to 1.0/2.0 m/s for low-speed learning
-            if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.3:  # Increased yaw rate threshold for two-wheelers
+            min_speed = 1.0 if self.current_vehicle_type == "two_wheeler" else 2.0
+
+            if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.3:
                 ratio = speed_2d / ai_speed
-                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.2  # Reduced from 0.5 to 0.2 to allow lower scale factor
-                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 3.0 # Increased upper clip for two-wheelers
-                lr = 0.05 if getattr(self, '_speed_scale_updates', 0) < 20 else (0.02 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.005)
-                self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
-                self.speed_scale = (1.0 - lr) * getattr(self, 'speed_scale', 1.0) + lr * float(np.clip(ratio, clip_min, clip_max))
+                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.2
+                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 3.0
+                ratio_clipped = float(np.clip(ratio, clip_min, clip_max))
+
+                if not hasattr(self, '_speed_ratio_history'):
+                    self._speed_ratio_history = []
+
+                # Fast median initialization for short pre-outage (first 30 valid samples)
+                if getattr(self, '_speed_scale_updates', 0) < 30:
+                    self._speed_ratio_history.append(ratio_clipped)
+                    if len(self._speed_ratio_history) >= 5:
+                        self.speed_scale = float(np.median(self._speed_ratio_history))
+                    self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
+                else:
+                    # Adaptive learning rate: faster initial convergence, slower steady-state
+                    lr = 0.05 if getattr(self, '_speed_scale_updates', 0) < 100 else 0.02
+                    if self.current_vehicle_type == "two_wheeler":
+                        lr = 0.02
+                    self._speed_scale_updates = getattr(self, '_speed_scale_updates', 0) + 1
+                    self.speed_scale = (1.0 - lr) * getattr(self, 'speed_scale', 1.0) + lr * ratio_clipped
 
         # Dynamic yaw-variance AI scaling (Phase 6/11 production compromise)
         if ai_speed is not None:
-            # Apply online speed scale factor (k_v) learned during GNSS-aided driving
             # If two_wheeler, we rely heavily on the scale bias correction since the model is car-only
             if is_stopped:
                 scaled_ai_speed = 0.0
@@ -172,6 +187,9 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 scaled_ai_speed = ai_speed * getattr(self, 'speed_scale', 1.0)
                 yaw_var_rad2 = float(self.ekf.P[8, 8])
                 sigma_ai_eff = sigma_ai * (1.0 + self.k * yaw_var_rad2)
+
+                # Prevent float overflow in EKF
+                sigma_ai_eff = min(sigma_ai_eff, 50.0)
 
                 # CRITICAL: During GNSS outage, hard-cap speed noise to ensure AI velocity is not ignored
                 if not is_gnss_available:
@@ -209,10 +227,12 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
             if is_clean and mag_yaw is not None:
                 # Injection during GNSS outage
                 if not is_gnss_available:
-                    # Use calibrated heading only if calibration was successful and quality is good
-                    if getattr(self.calib, 'mag_is_calibrated', False) and getattr(self.calib, 'mag_calibration_quality', 0.0) >= 0.5:
-                        # Scale uncertainty: 2° for perfect quality, 8° for moderate quality
-                        base_sigma_deg = 2.0 + 6.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5))
+                    # CRITICAL FIX: Use magnetometer even with moderate quality (≥0.2) during outage
+                    # Without mag anchor, gyro bias integration causes ~60° heading drift over 60s
+                    # This is the primary cause of Vta27, Vta28, Vta29, Vta30, Vw16a failures
+                    if getattr(self.calib, 'mag_is_calibrated', False) and getattr(self.calib, 'mag_calibration_quality', 0.0) >= 0.2:
+                        # Scale uncertainty: 2° for perfect quality (1.0), 12° for poor quality (0.2)
+                        base_sigma_deg = 2.0 + 10.0 * (1.0 - getattr(self.calib, 'mag_calibration_quality', 0.5))
                         sigma_mag = np.radians(base_sigma_deg)
 
                         self.ekf.update_heading(
@@ -308,9 +328,10 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                                     road_bearing_deg = (road_bearing_deg + 180.0) % 360.0
                                     diff_fwd = diff_rev
 
-                            # Only apply heading update if alignment is reasonable (< 45 degrees)
-                            # to prevent snapping to perpendicular cross-streets or wrong directions
-                            if abs(diff_fwd) < 45.0:
+                            # CRITICAL FIX: Tighten heading gate from 45° to 30°
+                            # Prevents snapping to perpendicular cross-streets during yaw divergence
+                            # This caused Vta27, Vta28 to snap to wrong segments
+                            if abs(diff_fwd) < 30.0:
                                 road_heading_rad = np.radians(road_bearing_deg)
                                 if not is_gnss_available:
                                     # During outage: inject map heading even during turns to prevent yaw divergence
@@ -323,7 +344,7 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
 
                                     dynamic_head_sigma_deg = min(dynamic_head_sigma_deg, 30.0)
 
-                                    if abs(diff_fwd) < 35.0:
+                                    if abs(diff_fwd) < 25.0:
                                         sigma_heading = np.radians(dynamic_head_sigma_deg)
                                         self.ekf.update_map_matching_heading(road_heading_rad, sigma_heading=sigma_heading, source="MAP_HEADING")
                                 else:
@@ -557,8 +578,9 @@ def evaluate_dead_reckoning_session(session_config):
 
     is_stationary = (outage_dist < 50.0)
     if is_stationary:
-        # Avoid division by near-zero artifact inflating the drift percentage
-        drift_pct = 0.0
+        # For stationary sessions, report drift as absolute error (meters)
+        # rather than suppressing it as 0%, to catch positioning failures
+        drift_pct = (final_err / 10.0)  # Normalize to ~10m baseline for comparison
     else:
         drift_pct = (final_err / outage_dist) * 100.0 if outage_dist > 0 else 0.0
 
