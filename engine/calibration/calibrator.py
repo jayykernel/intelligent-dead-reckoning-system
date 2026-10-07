@@ -65,8 +65,8 @@ class CalibrationEngine:
             # Check if stationary gravity indicates a heavy tilt (e.g. motorbike on side stand)
             # If so, and we have clean steady upright driving data, prefer upright driving gravity
             gyro_norm = np.linalg.norm(gyro, axis=1)
-            upright_mask = (speed > 2.0) & (gyro_norm < 0.15)
-            if np.sum(upright_mask) > 50:
+            upright_mask = (speed > 1.0) & (gyro_norm < 0.2)
+            if np.sum(upright_mask) > 20:
                 g_upright = np.mean(acc[upright_mask], axis=0)
                 # If angle between stat gravity and upright gravity > 20 deg, use upright gravity
                 cos_ang = np.dot(g_phone, g_upright) / (np.linalg.norm(g_phone) * np.linalg.norm(g_upright))
@@ -75,8 +75,8 @@ class CalibrationEngine:
         else:
             # Fallback to upright driving
             gyro_norm = np.linalg.norm(gyro, axis=1)
-            upright_mask = (speed > 2.0) & (gyro_norm < 0.15)
-            if np.sum(upright_mask) > 50:
+            upright_mask = (speed > 1.0) & (gyro_norm < 0.2)
+            if np.sum(upright_mask) > 20:
                 g_phone = np.mean(acc[upright_mask], axis=0)
                 self.gyro_bias = np.zeros(3)
             else:
@@ -198,11 +198,51 @@ class CalibrationEngine:
         # Linear terms vector
         bv = np.array([g, h, i])
 
-        # Check that A is positive definite (valid ellipsoid). If not, reject fit.
+        # Check that A is positive definite (valid ellipsoid). If not, attempt 2D planar fallback.
         eigvals = np.linalg.eigvalsh(A)
         if np.any(eigvals <= 0):
             print("  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).")
-            return False
+            # Universal Fix 3: 2D Planar Calibration Fallback
+            # Attempt 2D circle fit on horizontal (X-Y) plane assuming level vehicle motion
+            print("  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...")
+
+            # Project magnetometer data onto horizontal plane (X-Y)
+            mag_xy = mag_clean[:, :2]  # (N, 2)
+
+            # 2D circle fit: (x - cx)^2 + (y - cy)^2 = r^2
+            # Least-squares: fit circle center (cx, cy)
+            A_2d = np.column_stack([mag_xy[:, 0], mag_xy[:, 1], np.ones(len(mag_xy))])
+            b_2d = mag_xy[:, 0]**2 + mag_xy[:, 1]**2
+
+            try:
+                sol_2d = np.linalg.lstsq(A_2d, b_2d, rcond=None)[0]
+                cx = sol_2d[0] / 2.0
+                cy = sol_2d[1] / 2.0
+
+                # Set hard-iron offset (X, Y from circle fit, Z from mean)
+                self.mag_hard_iron = np.array([cx, cy, np.mean(mag_clean[:, 2])])
+
+                # Estimate 2D soft-iron correction (assume isotropic in horizontal plane)
+                mag_corrected_xy = mag_xy - np.array([cx, cy])
+                radii = np.linalg.norm(mag_corrected_xy, axis=1)
+                avg_radius_2d = np.mean(radii)
+
+                # Normalize to expected horizontal Earth field magnitude (~45 uT)
+                scale_2d = 45.0 / avg_radius_2d if avg_radius_2d > 1.0 else 1.0
+                self.mag_soft_iron = np.diag([scale_2d, scale_2d, 1.0])
+
+                # Assess 2D calibration quality
+                residuals_2d = np.abs(radii - avg_radius_2d)
+                residual_std_2d = np.std(residuals_2d) / avg_radius_2d
+                self.mag_calibration_quality = float(np.clip(1.0 - residual_std_2d / 0.15, 0.1, 0.85))
+
+                self.mag_is_calibrated = True
+                print(f"  2D planar magnetometer calibration: hard_iron=({self.mag_hard_iron[0]:.1f}, {self.mag_hard_iron[1]:.1f}, {self.mag_hard_iron[2]:.1f}) uT, quality={self.mag_calibration_quality:.2f}")
+
+                return True
+            except (np.linalg.LinAlgError, ValueError) as e:
+                print(f"  WARNING: 2D planar fallback also failed: {e}")
+                return False
 
         # Hard-iron offset: center = -0.5 * A^{-1} @ bv
         try:
