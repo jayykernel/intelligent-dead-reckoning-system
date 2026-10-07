@@ -53,6 +53,19 @@ def load_iovnbd_session(
     return s_df, v_df
 
 
+def _parse_start_time_of_day(date_str: str) -> float:
+    """
+    Parse date string in format 'YYYY-MO-DD HH-MI-SS_SSS' or 'YYYY-MM-DD HH:MI:SS:MS'
+    and return seconds since start of day.
+    """
+    time_part = date_str.split()[1]
+    # Normalize separators: replace colons with hyphens
+    time_part = time_part.replace(':', '-')
+    parts = time_part.split('-')
+    h, m, s, ms = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+    return h * 3600 + m * 60 + s + ms / 1000.0
+
+
 def preprocess_session(
     s_df: pd.DataFrame,
     v_df: pd.DataFrame,
@@ -73,45 +86,59 @@ def preprocess_session(
     - gt_speed: ground truth forward velocity (m/s)
     - gt_heading: ground truth heading (deg)
     """
-    # 1. Normalize timestamps to seconds relative to start
-    # Smartphone time is in ms
-    s_time = (s_df['TIME SINCE START (ms)'] - s_df['TIME SINCE START (ms)'].iloc[0]) / 1000.0
+    # 1. Normalize timestamps to seconds relative to start using absolute time-of-day alignment
+    # Parse absolute start time from S file's DATE column
+    date_col_s = 'DATE (YYYY-MO-DD HH-MI-SS_SSS)' if 'DATE (YYYY-MO-DD HH-MI-SS_SSS)' in s_df.columns else 'DATE'
 
-    # Vehicle time is in seconds
-    v_time = v_df['Time Since Start of Day (seconds)'] - v_df['Time Since Start of Day (seconds)'].iloc[0]
+    date_str = s_df[date_col_s].iloc[0]
+    # Parse the time part to get seconds since start of day for the S file's start
+    time_part = date_str.split()[1]
+    # Normalize separators: replace colons with hyphens and underscores with hyphens
+    time_part = time_part.replace(':', '-').replace('_', '-')
+    parts = time_part.split('-')
+    h, m, s, ms = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+    s_start_sec_of_day = h * 3600 + m * 60 + s + ms / 1000.0
 
-    # Find common duration
-    max_duration = min(s_time.iloc[-1], v_time.iloc[-1])
-    uniform_time = np.arange(0.0, max_duration, target_dt)
+    # Smartphone time is in ms - convert to absolute time since start of day
+    s_time = s_start_sec_of_day + (s_df['TIME SINCE START (ms)'] - s_df['TIME SINCE START (ms)'].iloc[0]) / 1000.0
+
+    # Vehicle time is in seconds since start of day (already absolute)
+    v_time = v_df['Time Since Start of Day (seconds)'].values
+
+    # Find common absolute time window
+    t_start = max(s_time.iloc[0], v_time[0])
+    t_end = min(s_time.iloc[-1], v_time[-1])
+    uniform_time_abs = np.arange(t_start, t_end, target_dt)
+    uniform_time = uniform_time_abs - t_start  # Relative time starting from 0 for output
 
     # 2. Extract and interpolate sensor features
     # Gyro columns: IO-VNBD uses Yaw, Pitch, Roll in rad/s
-    acc_x = np.interp(uniform_time, s_time, s_df['ACCELEROMETER X (m/s)'] if 'ACCELEROMETER X (m/s)' in s_df else s_df.filter(like='ACCELEROMETER X').iloc[:, 0])
-    acc_y = np.interp(uniform_time, s_time, s_df['ACCELEROMETER Y (m/s)'] if 'ACCELEROMETER Y (m/s)' in s_df else s_df.filter(like='ACCELEROMETER Y').iloc[:, 0])
-    acc_z = np.interp(uniform_time, s_time, s_df['ACCELEROMETER Z (m/s)'] if 'ACCELEROMETER Z (m/s)' in s_df else s_df.filter(like='ACCELEROMETER Z').iloc[:, 0])
+    acc_x = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER X (m/s)'] if 'ACCELEROMETER X (m/s)' in s_df else s_df.filter(like='ACCELEROMETER X').iloc[:, 0])
+    acc_y = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER Y (m/s)'] if 'ACCELEROMETER Y (m/s)' in s_df else s_df.filter(like='ACCELEROMETER Y').iloc[:, 0])
+    acc_z = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER Z (m/s)'] if 'ACCELEROMETER Z (m/s)' in s_df else s_df.filter(like='ACCELEROMETER Z').iloc[:, 0])
 
-    gyro_yaw = np.interp(uniform_time, s_time, s_df['GYROSCOPE Yaw (rad/s)'])
-    gyro_pitch = np.interp(uniform_time, s_time, s_df['GYROSCOPE Pitch (rad/s)'])
-    gyro_roll = np.interp(uniform_time, s_time, s_df['GYROSCOPE Roll (rad/s)'])
+    gyro_yaw = np.interp(uniform_time_abs, s_time, s_df['GYROSCOPE Yaw (rad/s)'])
+    gyro_pitch = np.interp(uniform_time_abs, s_time, s_df['GYROSCOPE Pitch (rad/s)'])
+    gyro_roll = np.interp(uniform_time_abs, s_time, s_df['GYROSCOPE Roll (rad/s)'])
 
-    mag_x = np.interp(uniform_time, s_time, s_df['MAGNETIC FIELD X (μT)'] if 'MAGNETIC FIELD X (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD X').iloc[:, 0])
-    mag_y = np.interp(uniform_time, s_time, s_df['MAGNETIC FIELD Y (μT)'] if 'MAGNETIC FIELD Y (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD Y').iloc[:, 0])
-    mag_z = np.interp(uniform_time, s_time, s_df['MAGNETIC FIELD Z (μT)'] if 'MAGNETIC FIELD Z (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD Z').iloc[:, 0])
+    mag_x = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD X (μT)'] if 'MAGNETIC FIELD X (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD X').iloc[:, 0])
+    mag_y = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD Y (μT)'] if 'MAGNETIC FIELD Y (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD Y').iloc[:, 0])
+    mag_z = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD Z (μT)'] if 'MAGNETIC FIELD Z (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD Z').iloc[:, 0])
 
-    phone_lat = np.interp(uniform_time, s_time, s_df['GPS LATITUDE (degrees)'])
-    phone_lon = np.interp(uniform_time, s_time, s_df['GPS LONGITUDE (degrees)'])
-    phone_alt = np.interp(uniform_time, s_time, s_df['GPS ALTITUDE (m)'])
+    phone_lat = np.interp(uniform_time_abs, s_time, s_df['GPS LATITUDE (degrees)'])
+    phone_lon = np.interp(uniform_time_abs, s_time, s_df['GPS LONGITUDE (degrees)'])
+    phone_alt = np.interp(uniform_time_abs, s_time, s_df['GPS ALTITUDE (m)'])
     # Convert km/h to m/s
-    phone_speed = np.interp(uniform_time, s_time, s_df['GPS SPEED (Kmh)']) / 3.6
-    phone_heading = np.interp(uniform_time, s_time, s_df['GPS ORIENTATION (°)'] if 'GPS ORIENTATION (°)' in s_df else s_df.filter(like='GPS ORIENTATION').iloc[:, 0])
+    phone_speed = np.interp(uniform_time_abs, s_time, s_df['GPS SPEED (Kmh)']) / 3.6
+    phone_heading = np.interp(uniform_time_abs, s_time, s_df['GPS ORIENTATION (°)'] if 'GPS ORIENTATION (°)' in s_df else s_df.filter(like='GPS ORIENTATION').iloc[:, 0])
 
-    # 3. Ground Truth from V file
-    gt_lat = np.interp(uniform_time, v_time, v_df['Latitude (degrees)'])
-    gt_lon = np.interp(uniform_time, v_time, v_df['Longitude (degrees)'])
+    # 3. Ground Truth from V file - interpolate against absolute time
+    gt_lat = np.interp(uniform_time_abs, v_time, v_df['Latitude (degrees)'])
+    gt_lon = np.interp(uniform_time_abs, v_time, v_df['Longitude (degrees)'])
     # Height in V file is in meters (labeled as 'Height (km)' in header due to dataset typo)
-    gt_alt = np.interp(uniform_time, v_time, v_df['Height (km)'])
-    gt_speed = np.interp(uniform_time, v_time, v_df['Velocity (km/hr)']) / 3.6
-    gt_heading = np.interp(uniform_time, v_time, v_df['Heading (degrees)'])
+    gt_alt = np.interp(uniform_time_abs, v_time, v_df['Height (km)'])
+    gt_speed = np.interp(uniform_time_abs, v_time, v_df['Velocity (km/hr)']) / 3.6
+    gt_heading = np.interp(uniform_time_abs, v_time, v_df['Heading (degrees)'])
 
     # 4. Construct unified DataFrame
     synced_df = pd.DataFrame({
