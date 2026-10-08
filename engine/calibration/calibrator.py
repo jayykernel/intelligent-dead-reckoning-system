@@ -308,6 +308,111 @@ class CalibrationEngine:
 
         return acc_veh, gyro_veh
 
+
+    def to_dict(self) -> dict:
+        """Serialize calibration state to a dictionary with schema versioning."""
+        return {
+            "schema_version": "1.0",
+            "is_calibrated": self.is_calibrated,
+            "alignment_score": float(self.alignment_score),
+            "gyro_bias": self.gyro_bias.tolist(),
+            "accel_bias": self.accel_bias.tolist(),
+            "R_phone_to_veh": self.R_phone_to_veh.tolist(),
+            "mag_is_calibrated": self.mag_is_calibrated,
+            "mag_calibration_quality": float(self.mag_calibration_quality),
+            "mag_hard_iron": self.mag_hard_iron.tolist(),
+            "mag_soft_iron": self.mag_soft_iron.tolist()
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'CalibrationEngine':
+        """
+        Deserialize and strictly validate calibration state.
+        Returns a new CalibrationEngine instance. If data is invalid, 
+        returns a default uncalibrated instance.
+        """
+        inst = cls()
+        try:
+            if data.get("schema_version") != "1.0":
+                raise ValueError("Unsupported schema version")
+
+            # Validate basic numerical types and bounds
+            is_calibrated = bool(data.get("is_calibrated", False))
+            
+            def safe_array(val, shape, min_val, max_val):
+                arr = np.array(val, dtype=np.float64)
+                if arr.shape != shape:
+                    raise ValueError(f"Invalid shape: {arr.shape} != {shape}")
+                if np.any(np.isnan(arr)) or np.any(np.isinf(arr)):
+                    raise ValueError("NaN or Inf detected")
+                if np.any(arr < min_val) or np.any(arr > max_val):
+                    raise ValueError(f"Values out of bounds [{min_val}, {max_val}]")
+                return arr
+
+            gyro_bias = safe_array(data.get("gyro_bias"), (3,), -0.2, 0.2)
+            accel_bias = safe_array(data.get("accel_bias"), (3,), -5.0, 5.0)
+            
+            R = safe_array(data.get("R_phone_to_veh"), (3, 3), -1.0, 1.0)
+            # Validate orthonormality explicitly
+            identity_err = np.linalg.norm(R @ R.T - np.eye(3), ord='fro')
+            if identity_err > 1e-4:
+                raise ValueError(f"R_phone_to_veh not orthonormal, error={identity_err}")
+            # Validate right-handed coordinate system (det == 1)
+            if np.linalg.det(R) < 0.5:
+                raise ValueError("R_phone_to_veh has invalid determinant")
+
+            mag_is_calibrated = bool(data.get("mag_is_calibrated", False))
+            mag_hard_iron = safe_array(data.get("mag_hard_iron"), (3,), -500.0, 500.0)
+            
+            # soft iron could theoretically have values outside [-10, 10], but we bounds check eigenvalues later
+            # so we use a loose bound for raw values here
+            mag_soft_iron = safe_array(data.get("mag_soft_iron"), (3, 3), -50.0, 50.0)
+            
+            if mag_is_calibrated:
+                # Need eigenvalues in [0.1, 10.0]
+                eigvals = np.linalg.eigvalsh(mag_soft_iron)
+                if np.any(eigvals < 0.1) or np.any(eigvals > 10.0):
+                    raise ValueError("mag_soft_iron eigenvalues out of bounds [0.1, 10.0]")
+
+            inst.is_calibrated = is_calibrated
+            inst.alignment_score = float(data.get("alignment_score", 0.0))
+            inst.gyro_bias = gyro_bias
+            inst.accel_bias = accel_bias
+            inst.R_phone_to_veh = R
+            
+            inst.mag_is_calibrated = mag_is_calibrated
+            inst.mag_calibration_quality = float(data.get("mag_calibration_quality", 0.0))
+            inst.mag_hard_iron = mag_hard_iron
+            inst.mag_soft_iron = mag_soft_iron
+
+        except Exception as e:
+            print(f"Calibration load failed, falling back to defaults: {e}")
+            return cls()
+
+        return inst
+
+    def save_to_json(self, file_path: str):
+        """Atomically save calibration to JSON file."""
+        import json, os
+        data = self.to_dict()
+        tmp_path = file_path + ".tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        os.replace(tmp_path, file_path)
+
+    @classmethod
+    def load_from_json(cls, file_path: str) -> 'CalibrationEngine':
+        """Load calibration from JSON file safely."""
+        import json, os
+        if not os.path.exists(file_path):
+            return cls()
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return cls.from_dict(data)
+        except Exception as e:
+            print(f"Failed to read {file_path}, falling back to defaults: {e}")
+            return cls()
     def check_misalignment_trigger(self, acc_window: np.ndarray, speed_window: np.ndarray, dt: float = 0.1, threshold_deg: float = 10.0) -> bool:
         """
         Check if the phone mount has shifted by comparing new data against the existing calibration.

@@ -256,3 +256,84 @@ class OnlineMagnetometerCalibrator:
         self.mag_hard_iron = np.zeros(3)
         self.mag_soft_iron = np.eye(3)
         self.calibration_quality = 0.0
+
+    def to_dict(self) -> dict:
+        """Serialize calibration state to a dictionary with schema versioning."""
+        return {
+            "schema_version": "1.0",
+            "is_calibrated": self.is_calibrated,
+            "sample_count": self.sample_count,
+            "calibration_quality": float(self.calibration_quality),
+            "mag_hard_iron": self.mag_hard_iron.tolist(),
+            "mag_soft_iron": self.mag_soft_iron.tolist(),
+            "field_strength": float(self.field_strength)
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'OnlineMagnetometerCalibrator':
+        """
+        Deserialize and strictly validate online magnetometer calibration state.
+        Returns a new OnlineMagnetometerCalibrator instance. If data is invalid, 
+        returns a default uncalibrated instance.
+        """
+        inst = cls()
+        try:
+            if data.get("schema_version") != "1.0":
+                raise ValueError("Unsupported schema version")
+
+            is_calibrated = bool(data.get("is_calibrated", False))
+            
+            def safe_array(val, shape, min_val, max_val):
+                arr = np.array(val, dtype=np.float64)
+                if arr.shape != shape:
+                    raise ValueError(f"Invalid shape: {arr.shape} != {shape}")
+                if np.any(np.isnan(arr)) or np.any(np.isinf(arr)):
+                    raise ValueError("NaN or Inf detected")
+                if np.any(arr < min_val) or np.any(arr > max_val):
+                    raise ValueError(f"Values out of bounds [{min_val}, {max_val}]")
+                return arr
+
+            mag_hard_iron = safe_array(data.get("mag_hard_iron"), (3,), -500.0, 500.0)
+            mag_soft_iron = safe_array(data.get("mag_soft_iron"), (3, 3), -50.0, 50.0)
+            
+            if is_calibrated:
+                # Eigenvalues must be in [0.1, 10.0]
+                eigvals = np.linalg.eigvalsh(mag_soft_iron)
+                if np.any(eigvals < 0.1) or np.any(eigvals > 10.0):
+                    raise ValueError("mag_soft_iron eigenvalues out of bounds [0.1, 10.0]")
+
+            inst.is_calibrated = is_calibrated
+            inst.sample_count = int(data.get("sample_count", 0))
+            inst.calibration_quality = float(data.get("calibration_quality", 0.0))
+            inst.mag_hard_iron = mag_hard_iron
+            inst.mag_soft_iron = mag_soft_iron
+            inst.field_strength = float(data.get("field_strength", 48.0))
+
+        except Exception as e:
+            print(f"Magnetometer calibration load failed, falling back to defaults: {e}")
+            return cls()
+
+        return inst
+
+    def save_calibration(self, file_path: str):
+        """Atomically save calibration to JSON file."""
+        import json, os
+        data = self.to_dict()
+        tmp_path = file_path + ".tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        os.replace(tmp_path, file_path)
+
+    @classmethod
+    def load_calibration(cls, file_path: str) -> 'OnlineMagnetometerCalibrator':
+        """Load calibration from JSON file safely."""
+        import json, os
+        if not os.path.exists(file_path):
+            return cls()
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return cls.from_dict(data)
+        except Exception as e:
+            print(f"Failed to read {file_path}, falling back to defaults: {e}")
+            return cls()
