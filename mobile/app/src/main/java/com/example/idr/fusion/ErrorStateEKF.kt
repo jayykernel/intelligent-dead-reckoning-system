@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -46,6 +47,75 @@ class ErrorStateEKF(
         for (i in 0 until size) {
             P.set(startIdx + i, startIdx + i, value)
         }
+    }
+
+    private fun validateState() {
+        // Check if nominal states contain NaN or Inf
+        for (val in p) if (!val.isFinite()) throw IllegalArgumentException("NaN/Inf in position")
+        for (val in v) if (!val.isFinite()) throw IllegalArgumentException("NaN/Inf in velocity")
+        for (val in q) if (!val.isFinite()) throw IllegalArgumentException("NaN/Inf in quaternion")
+        for (val in bA) if (!val.isFinite()) throw IllegalArgumentException("NaN/Inf in accel bias")
+        for (val in bG) if (!val.isFinite()) throw IllegalArgumentException("NaN/Inf in gyro bias")
+
+        // Check if covariance contains NaN or Inf
+        for (i in 0 until 15) {
+            for (j in 0 until 15) {
+                if (!P.get(i, j).isFinite()) {
+                    throw IllegalArgumentException("NaN/Inf in covariance")
+                }
+            }
+        }
+    }
+
+    private fun ensurePositiveDefinite(epsilon: Double = 1e-9) {
+        // Check if covariance contains NaN or Inf before processing
+        for (i in 0 until 15) {
+            for (j in 0 until 15) {
+                if (!P.get(i, j).isFinite()) {
+                    throw IllegalArgumentException("NaN/Inf in covariance before positive-definite check")
+                }
+            }
+        }
+
+        // Symmetrize: P = 0.5 * (P + P^T)
+        val Ptrans = P.transpose()
+        val Psym = SimpleMatrix(15, 15)
+        for (i in 0 until 15) {
+            for (j in 0 until 15) {
+                Psym.set(i, j, 0.5 * (P.get(i, j) + Ptrans.get(i, j)))
+            }
+        }
+        P = Psym
+
+        // Eigenvalue decomposition of symmetric matrix
+        val eigen = P.eig()
+        if (!eigen.hasEigenvector) {
+            // Fallback to diagonal matrix if eigen decomposition fails
+            P = SimpleMatrix.identity(15).scale(epsilon)
+            return
+        }
+
+        val eigenvalues = eigen.getRealEigenvalues()
+        val eigenvectors = eigen.getEigenVector
+
+        // Eigenvalue flooring: clip eigenvalues to minimum epsilon
+        val clippedEigenvalues = DoubleArray(15) { max(eigenvalues[i], epsilon) }
+
+        // Reconstruct: P = V * D * V^T
+        val V = eigenvectors
+        val D = SimpleMatrix(15, 15, true, *clippedEigenvalues)
+        val VD = V.mult(D)
+        P = VD.mult(V.transpose())
+
+        // Ensure symmetry again
+        val Ptrans2 = P.transpose()
+        val Psym2 = SimpleMatrix(15, 15)
+        for (i in 0 until 15) {
+            for (j in 0 until 15) {
+                Psym2.set(i, j, 0.5 * (P.get(i, j) + Ptrans2.get(i, j)))
+            }
+        }
+        P = Psym2
     }
 
     fun setInitialState(
@@ -221,6 +291,10 @@ class ErrorStateEKF(
 
         // Enforce symmetry
         P = P.plus(P.transpose()).scale(0.5)
+
+        // Ensure positive definiteness and validate state
+        ensurePositiveDefinite()
+        validateState()
     }
 
     fun update(
@@ -271,6 +345,10 @@ class ErrorStateEKF(
 
         // 8. Inject error states into nominal state
         injectErrorState(deltaX)
+
+        // Ensure positive definiteness and validate state after update
+        ensurePositiveDefinite()
+        validateState()
 
         return Triple(true, nis, chi2Thresh)
     }

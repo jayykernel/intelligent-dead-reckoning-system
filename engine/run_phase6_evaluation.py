@@ -58,7 +58,9 @@ def run_evaluation(
     acc = synced[["acc_x", "acc_y", "acc_z"]].values
     gyro = synced[["gyro_x", "gyro_y", "gyro_z"]].values
     speed = synced["gt_speed"].values
-    speed = np.nan_to_num(speed, nan=0.0)
+    if np.any(np.isnan(speed)) or np.any(np.isinf(speed)):
+        raise ValueError("NaN or Inf detected in speed data - this indicates a data quality issue that should be addressed rather than masked")
+    # No silent replacement - if data is invalid, the test should fail to reveal the underlying issue
     mag = synced[["mag_x", "mag_y", "mag_z"]].values if "mag_x" in synced.columns else None
 
     calib_success = calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=dt)

@@ -4,6 +4,7 @@ import org.ejml.simple.SimpleMatrix
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.atan2
+import kotlin.math.max
 
 /**
  * Lean-Angle EKF Estimator (N1)
@@ -30,7 +31,77 @@ class LeanAngleEKF(
         0.0, qBias
     ))
 
+    private fun validateState() {
+        // Check if state contains NaN or Inf
+        if (!x.get(0, 0).isFinite() || !x.get(1, 0).isFinite()) {
+            throw IllegalArgumentException("NaN/Inf in LeanAngleEKF state")
+        }
+        // Check if covariance contains NaN or Inf
+        for (i in 0 until 2) {
+            for (j in 0 until 2) {
+                if (!P.get(i, j).isFinite()) {
+                    throw IllegalArgumentException("NaN/Inf in LeanAngleEKF covariance")
+                }
+            }
+        }
+    }
+
+    private fun ensurePositiveDefinite(epsilon: Double = 1e-9) {
+        // Check if covariance contains NaN or Inf before processing
+        for (i in 0 until 2) {
+            for (j in 0 until 2) {
+                if (!P.get(i, j).isFinite()) {
+                    throw IllegalArgumentException("NaN/Inf in LeanAngleEKF covariance before positive-definite check")
+                }
+            }
+        }
+
+        // Symmetrize: P = 0.5 * (P + P^T)
+        val Ptrans = P.transpose()
+        val Psym = SimpleMatrix(2, 2)
+        for (i in 0 until 2) {
+            for (j in 0 until 2) {
+                Psym.set(i, j, 0.5 * (P.get(i, j) + Ptrans.get(i, j)))
+            }
+        }
+        P = Psym
+
+        // Eigenvalue decomposition of symmetric matrix
+        val eigen = P.eig()
+        if (!eigen.hasEigenvector) {
+            // Fallback to diagonal matrix if eigen decomposition fails
+            P = SimpleMatrix.identity(2).scale(epsilon)
+            return
+        }
+
+        val eigenvalues = eigen.getRealEigenvalues()
+        val eigenvectors = eigen.getEigenVector
+
+        // Eigenvalue flooring: clip eigenvalues to minimum epsilon
+        val clippedEigenvalues = DoubleArray(2) { max(eigenvalues[i], epsilon) }
+
+        // Reconstruct: P = V * D * V^T
+        val V = eigenvectors
+        val D = SimpleMatrix(2, 2, true, *clippedEigenvalues)
+        val VD = V.mult(D)
+        P = VD.mult(V.transpose())
+
+        // Ensure symmetry again
+        val Ptrans2 = P.transpose()
+        val Psym2 = SimpleMatrix(2, 2)
+        for (i in 0 until 2) {
+            for (j in 0 until 2) {
+                Psym2.set(i, j, 0.5 * (P.get(i, j) + Ptrans2.get(i, j)))
+            }
+        }
+        P = Psym2
+    }
+
     fun predict(gyroY: Double): Double {
+        if (!gyroY.isFinite()) {
+            throw IllegalArgumentException("NaN/Inf gyro_y input to LeanAngleEKF.predict")
+        }
+
         val phi = x.get(0, 0)
         val b = x.get(1, 0)
         val omega = gyroY - b
@@ -45,11 +116,17 @@ class LeanAngleEKF(
         ))
 
         P = F.mult(P).mult(F.transpose()).plus(Q)
+        ensurePositiveDefinite()
+        validateState()
 
         return x.get(0, 0)
     }
 
     fun update(accX: Double, accZ: Double, speed: Double = 0.0, gyroZ: Double = 0.0, g: Double = 9.81): Double {
+        if (!accX.isFinite() || !accZ.isFinite() || !speed.isFinite() || !gyroZ.isFinite() || !g.isFinite()) {
+            throw IllegalArgumentException("NaN/Inf input to LeanAngleEKF.update")
+        }
+
         val phiMeas: Double = if (speed > 1.0 && abs(gyroZ) > 0.05) {
             // Centripetal acceleration balance: tan(phi) = v * omega_z / g
             atan((speed * gyroZ) / g)
@@ -71,8 +148,15 @@ class LeanAngleEKF(
 
         x = x.plus(K.scale(y))
 
+        // Joseph form covariance update: P = (I - K H) P (I - K H)^T + K R K^T
         val I = SimpleMatrix.identity(2)
-        P = (I.minus(K.mult(H))).mult(P)
+        val I_KH = I.minus(K.mult(H))
+        val RK_cov = SimpleMatrix(1, 1, true, *doubleArrayOf(rMeas))
+        val K_R_Kt = K.mult(RK_cov).mult(K.transpose())
+        P = I_KH.mult(P).mult(I_KH.transpose()).plus(K_R_Kt)
+
+        ensurePositiveDefinite()
+        validateState()
 
         return x.get(0, 0)
     }

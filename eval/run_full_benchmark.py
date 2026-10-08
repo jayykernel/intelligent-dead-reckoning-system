@@ -470,7 +470,9 @@ def evaluate_dead_reckoning_session(session_config):
     N = len(synced)
     acc = synced[["acc_x", "acc_y", "acc_z"]].values
     gyro = synced[["gyro_x", "gyro_y", "gyro_z"]].values
-    speed = np.nan_to_num(synced["gt_speed"].values, nan=0.0)
+    speed = synced["gt_speed"].values
+    if np.any(np.isnan(speed)) or np.any(np.isinf(speed)):
+        raise ValueError("NaN or Inf detected in speed data - this indicates a data quality issue that should be addressed rather than masked")
     mag = synced[["mag_x", "mag_y", "mag_z"]].values if "mag_x" in synced.columns else None
 
     # Initial calibration of frame

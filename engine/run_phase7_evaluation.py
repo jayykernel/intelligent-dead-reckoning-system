@@ -125,7 +125,9 @@ def run_phase7_evaluation():
 
     acc = synced[["acc_x", "acc_y", "acc_z"]].values
     gyro = synced[["gyro_x", "gyro_y", "gyro_z"]].values
-    speed = np.nan_to_num(synced["gt_speed"].values, nan=0.0)
+    speed = synced["gt_speed"].values
+    if np.any(np.isnan(speed)) or np.any(np.isinf(speed)):
+        raise ValueError("NaN or Inf detected in speed data - this indicates a data quality issue that should be addressed rather than masked")
 
     calib = CalibrationEngine()
     calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=0.1)

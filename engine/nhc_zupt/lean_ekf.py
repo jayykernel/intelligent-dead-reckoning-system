@@ -35,6 +35,28 @@ class LeanAngleEKF:
             self._use_notch = False
         self.last_filtered_acc_x = 0.0
 
+    def _validate_state(self):
+        """Ensure state and covariance are finite."""
+        if not np.all(np.isfinite(self.x)):
+            raise ValueError("NaN/Inf in LeanAngleEKF state")
+        if not np.all(np.isfinite(self.P)):
+            raise ValueError("NaN/Inf in LeanAngleEKF covariance")
+
+    def _ensure_positive_definite(self, epsilon: float = 1e-9):
+        """Enforce symmetry and apply eigenvalue flooring to 2x2 covariance matrix."""
+        if not np.all(np.isfinite(self.P)):
+            raise ValueError("NaN/Inf in LeanAngleEKF covariance before positive-definite check")
+
+        self.P = 0.5 * (self.P + self.P.T)
+        try:
+            w, v = np.linalg.eigh(self.P)
+        except np.linalg.LinAlgError:
+            self.P = np.eye(2) * epsilon
+            return
+        w_clipped = np.maximum(w, epsilon)
+        self.P = v @ np.diag(w_clipped) @ v.T
+        self.P = 0.5 * (self.P + self.P.T)
+
     def _apply_notch_filter(self, acc_x: float) -> float:
         """Apply notch filter to remove engine vibration from lateral acceleration."""
         if not getattr(self, '_use_notch', False):
@@ -48,6 +70,9 @@ class LeanAngleEKF:
         """
         Propagate lean angle using forward-axis roll gyro.
         """
+        if not np.isfinite(gyro_y):
+            raise ValueError("NaN/Inf gyro_y input to LeanAngleEKF.predict")
+
         phi, b = self.x
         omega = gyro_y - b
 
@@ -57,6 +82,8 @@ class LeanAngleEKF:
         # Jacobian F = [[1, -dt], [0, 1]]
         F = np.array([[1.0, -self.dt], [0.0, 1.0]])
         self.P = F @ self.P @ F.T + self.Q
+        self._ensure_positive_definite()
+        self._validate_state()
 
         return self.x[0]
 
@@ -65,6 +92,9 @@ class LeanAngleEKF:
         Measurement update using apparent gravity vector and/or kinematic lean angle.
         Applies vibration notch filter to lateral acceleration for two-wheelers.
         """
+        if not np.all(np.isfinite([acc_x, acc_z, speed, gyro_z, g])):
+            raise ValueError("NaN/Inf input to LeanAngleEKF.update")
+
         # Apply vibration notch filter to lateral acceleration
         filtered_acc_x = self._apply_notch_filter(acc_x)
 
@@ -81,11 +111,18 @@ class LeanAngleEKF:
         z = phi_meas
         y = z - self.x[0] # Innovation
 
-        S = H @ self.P @ H.T + self.R
-        K = self.P @ H.T / S
+        # S = H @ P @ H^T + R
+        S = float((H @ self.P @ H.T)[0, 0] + self.R)
+        K = (self.P @ H.T) / S  # (2, 1)
 
         self.x = self.x + K.flatten() * y
-        self.P = (np.eye(2) - K @ H) @ self.P
+
+        # Joseph form covariance update: P = (I - K H) P (I - K H)^T + K R K^T
+        I_KH = np.eye(2) - K @ H
+        R_cov = np.array([[self.R]])
+        self.P = I_KH @ self.P @ I_KH.T + K @ R_cov @ K.T
+        self._ensure_positive_definite()
+        self._validate_state()
 
         return self.x[0]
 

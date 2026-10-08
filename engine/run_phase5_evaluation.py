@@ -65,8 +65,9 @@ def run_evaluation(
     acc_calib = acc[:calib_N]
     gyro_calib = gyro[:calib_N]
     speed_calib = synced["gt_speed"].iloc[:calib_N].values
-    if np.any(np.isnan(speed_calib)):
-        speed_calib = np.nan_to_num(speed_calib, nan=0.0)
+    if np.any(np.isnan(speed_calib)) or np.any(np.isinf(speed_calib)):
+        raise ValueError("NaN or Inf detected in speed calibration data - this indicates a data quality issue that should be addressed rather than masked")
+    # No silent replacement - if data is invalid, the test should fail to reveal the underlying issue
 
     calib = CalibrationEngine()
     calib_success = calib.calibrate_from_session(acc_calib, gyro_calib, speed_calib, dt=dt)

@@ -78,6 +78,7 @@ class ErrorStateEKF:
             self.b_a = np.copy(b_a0)
         if b_g0 is not None:
             self.b_g = np.copy(b_g0)
+        self._validate_state()
 
     @staticmethod
     def quat_to_rot(q: np.ndarray) -> np.ndarray:
@@ -98,6 +99,44 @@ class ErrorStateEKF:
             [-v[1], v[0], 0.0]
         ])
 
+
+    def _validate_state(self):
+        """Ensure states and covariance are finite."""
+        if not np.all(np.isfinite(self.p)):
+            raise ValueError("NaN/Inf in position")
+        if not np.all(np.isfinite(self.v)):
+            raise ValueError("NaN/Inf in velocity")
+        if not np.all(np.isfinite(self.q)):
+            raise ValueError("NaN/Inf in quaternion")
+        if not np.all(np.isfinite(self.b_a)):
+            raise ValueError("NaN/Inf in accel bias")
+        if not np.all(np.isfinite(self.b_g)):
+            raise ValueError("NaN/Inf in gyro bias")
+        if not np.all(np.isfinite(self.P)):
+            raise ValueError("NaN/Inf in covariance")
+
+    def _ensure_positive_definite(self, epsilon: float = 1e-9):
+        """Enforce symmetry and apply eigenvalue flooring to covariance matrix."""
+        if not np.all(np.isfinite(self.P)):
+            raise ValueError("NaN/Inf in covariance before positive-definite check")
+        
+        # Symmetrize
+        self.P = 0.5 * (self.P + self.P.T)
+        
+        # Eigenvalue decomposition
+        try:
+            w, v = np.linalg.eigh(self.P)
+        except np.linalg.LinAlgError:
+            self.P = np.eye(15) * epsilon
+            return
+            
+        # Eigenvalue flooring
+        w_clipped = np.maximum(w, epsilon)
+        
+        # Reconstruct
+        self.P = v @ np.diag(w_clipped) @ v.T
+        self.P = 0.5 * (self.P + self.P.T)
+
     def predict(self, acc_raw: np.ndarray, gyro_raw: np.ndarray, dt: Optional[float] = None, Q_scale: float = 1.0):
         """
         Nominal state integration and error covariance propagation.
@@ -106,6 +145,8 @@ class ErrorStateEKF:
         """
         if dt is None:
             dt = self.dt
+        if not np.all(np.isfinite(acc_raw)) or not np.all(np.isfinite(gyro_raw)):
+            raise ValueError("NaN/Inf in IMU inputs (predict)")
 
         # 1. Bias-corrected IMU measurements
         acc_corr = acc_raw - self.b_a
@@ -179,8 +220,9 @@ class ErrorStateEKF:
 
         # 7. Covariance propagation
         self.P = F @ self.P @ F.T + Q
-        # Enforce symmetry
-        self.P = 0.5 * (self.P + self.P.T)
+        # Enforce symmetry and positive-definiteness
+        self._ensure_positive_definite()
+        self._validate_state()
 
     def update(
         self,
@@ -205,6 +247,9 @@ class ErrorStateEKF:
         Returns:
         (passed_gate, nis_val, chi2_threshold)
         """
+        if not np.all(np.isfinite(z)) or not np.all(np.isfinite(H)) or not np.all(np.isfinite(R_cov)):
+            raise ValueError(f"NaN/Inf inputs to update ({update_type})")
+
         # 1. Innovation vector
         y = z - h_x
         if update_type in ["MAG_HEADING", "GNSS_HEADING", "MAP_HEADING"]:
@@ -252,10 +297,11 @@ class ErrorStateEKF:
         # 7. Joseph form covariance update: P = (I - K H) P (I - K H)^T + K R K^T
         I_KH = np.eye(15) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ R_cov @ K.T
-        self.P = 0.5 * (self.P + self.P.T)
+        self._ensure_positive_definite()
 
         # 8. Inject error states into nominal state
         self.inject_error_state(delta_x)
+        self._validate_state()
 
         return True, nis, chi2_thresh
 
