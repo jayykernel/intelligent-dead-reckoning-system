@@ -1,6 +1,19 @@
 # Open Questions
 
-## Phase 6: GNSS+INS Fusion — Documented Limitation (Heading Observability)
+## Phase 2: Heading Observability - Status Update
+
+**Online Magnetometer Calibration (N8 / 2.1)**:
+- Implemented `engine/calibration/online_mag_cal.py` and associated unit tests.
+- Integrated into `fusion_engine.py` using `enable_online_mag_cal` flag.
+- Awaiting full benchmark validation to compare turning vs straight-line performance.
+
+**AI Speed Variance Heading Uncertainty Coupling (N7 / 2.2)**:
+- Logic implemented in `engine/fusion/ekf.py` to scale measurement noise `R` for `update_ai_forward_speed` based on yaw variance from EKF state.
+- Verified with unit tests (`engine/fusion/tests/test_speed_variance.py`).
+- Awaiting full benchmark validation to ensure no degradation.
+
+---
+
 
 ### Critical Finding: No Reliable Absolute Heading Reference During GNSS Outage
 

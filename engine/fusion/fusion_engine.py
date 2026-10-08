@@ -25,6 +25,7 @@ from engine.ai_filters.vehicle_classifier import VehicleClassifier
 from engine.nhc_zupt.lean_ekf import LeanAngleEKF
 from engine.nhc_zupt.constrained_ins import ConstrainedINS
 from engine.calibration.calibrator import CalibrationEngine
+from engine.calibration.online_mag_cal import OnlineMagnetometerCalibrator
 from engine.strapdown import dcm_to_quat
 
 
@@ -35,10 +36,12 @@ class GNSSINSFusionEngine:
         speed_model_path: str = "training/models/speed_filter.tflite",
         class_model_path: str = "training/models/vehicle_classifier.tflite",
         enable_ai: bool = True,
-        default_vehicle_type: str = "car"
+        default_vehicle_type: str = "car",
+        enable_online_mag_cal: bool = True
     ):
         self.dt = dt
         self.enable_ai = enable_ai
+        self.enable_online_mag_cal = enable_online_mag_cal
 
         # Core EKF with smartphone tuning
         self.ekf = ErrorStateEKF(
@@ -51,6 +54,7 @@ class GNSSINSFusionEngine:
 
         # Calibration
         self.calib = CalibrationEngine()
+        self.online_mag_cal = OnlineMagnetometerCalibrator() if enable_online_mag_cal else None
 
         # Phase 5 Modules
         self.classifier: Optional[VehicleClassifier] = None
@@ -262,18 +266,33 @@ class GNSSINSFusionEngine:
 
         # Apply AI Forward Speed update continuously as an aiding measurement
         if ai_speed is not None:
+            # Extract heading variance from EKF state (index 8 is yaw error)
+            yaw_var_rad2 = float(self.ekf.P[8, 8])
             self.ekf.update_ai_forward_speed(
                 speed_fwd=ai_speed,
                 sigma_speed=sigma_ai,
+                heading_uncertainty=yaw_var_rad2,
                 alpha=0.01,
                 timestamp=timestamp
             )
 
+        # Online Magnetometer Calibration (N8 Experiment) - Phase 2
+        mag_cal_used = False
+        mag_to_use = mag_raw
+        if self.enable_online_mag_cal and self.online_mag_cal is not None and mag_raw is not None:
+            # Update online calibration with raw magnetometer data
+            self.online_mag_cal.update(mag_raw)
+            # Apply calibration if we have a good calibration
+            cal_status = self.online_mag_cal.get_calibration_status()
+            if cal_status['is_calibrated'] and cal_status['quality'] > 0.1:
+                mag_to_use = self.online_mag_cal.apply_calibration(mag_raw)
+                mag_cal_used = True
+
         # 7. Magnetometer Disturbance Gating (N5)
         mag_used = False
-        if mag_raw is not None:
+        if mag_to_use is not None:
             # Rotate mag to vehicle frame
-            mag_veh = mag_raw @ self.calib.R_phone_to_veh.T
+            mag_veh = mag_to_use @ self.calib.R_phone_to_veh.T
             is_clean, mag_yaw, mag_info = self.mag_gate.process_measurement(mag_veh, R_veh_to_nav)
             if is_clean and mag_yaw is not None:
                 # Apply 1-DOF NIS gated heading update whenever magnetometer is clean

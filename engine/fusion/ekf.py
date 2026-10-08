@@ -409,6 +409,7 @@ class ErrorStateEKF:
         self,
         speed_fwd: float,
         sigma_speed: float = 1.0,
+        heading_uncertainty: float = 0.0,
         alpha: float = 0.01,
         timestamp: float = 0.0
     ) -> Tuple[bool, float, float]:
@@ -428,10 +429,12 @@ class ErrorStateEKF:
         H = np.zeros((1, 15))
         # Derivative w.r.t delta_v: y_axis_nav
         H[0, 3:6] = y_axis_nav
-        # Decouple attitude from AI speed to prevent cross-axis attitude corruption
-        # H[0, 6:9] = np.cross(y_axis_nav, self.v)
 
-        R_cov = np.array([[sigma_speed**2]])
+        # Heading uncertainty dynamic scaling of measurement noise R
+        # High heading uncertainty increases R to reduce trust in AI speed
+        R_cov_base = np.atleast_2d(sigma_speed**2)
+        uncertainty_factor = 1.0 + 10.0 * np.clip(heading_uncertainty, 0.0, 1.0)
+        R_cov = R_cov_base * uncertainty_factor
 
         return self.update(z, h_x, H, R_cov, update_type="AI_SPEED", alpha=alpha, timestamp=timestamp)
 

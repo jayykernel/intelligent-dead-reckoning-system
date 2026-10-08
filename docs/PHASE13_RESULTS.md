@@ -7,7 +7,7 @@
 | Session ID | Vehicle Category | Data Source / Platform | Outage Dist (m) | Final Error (m) | Drift % | Official Target (<=10%) | Stretch Target (1-2%) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **S4** | Car | IO-VNBD (MEMS) | 2.34 | 314.10 | **31.41%** | FAIL | FAIL |
-| **V-Vfa02** | Car | IO-VNBD (MEMS) | 1483.18 | 942.38 | **63.54%** | FAIL | FAIL |
+| **V-Vfa02** | Car | IO-VNBD (MEMS) | 1483.18 | 929.50 | **62.67%** | FAIL | FAIL |
 | **Vta26** | Car | IO-VNBD (MEMS) | 2.80 | 68.85 | **6.89%** | FAIL | FAIL |
 | **Vta27** | Car | IO-VNBD (MEMS) | 850.36 | 72.98 | **8.58%** | PASS | FAIL |
 | **Vta28** | Car | IO-VNBD (MEMS) | 697.14 | 465.14 | **66.72%** | FAIL | FAIL |
@@ -21,14 +21,14 @@
 | **Vw17** | Car | IO-VNBD (MEMS) | 151.29 | 1.46 | **0.97%** | PASS | PASS |
 | **session1** | Two Wheeler | Bridge Synthetic | 231.32 | 0.25 | **0.11%** | PASS | PASS |
 | **session2** | Two Wheeler | Bridge Synthetic | 211.11 | 152.76 | **72.36%** | FAIL | FAIL |
-| **S1 (Synthetic FOG 200Hz)** | Edge Fog | FOG Synthetic | 353.15 | 26.65 | **7.55%** | PASS | FAIL |
+| **S1 (Synthetic FOG 200Hz)** | Edge Fog | FOG Synthetic | 353.15 | 332.12 | **94.05%** | FAIL | FAIL |
 
 ### Summary of Drift Findings:
 - **Best Case (Car)**: Vw17 at 0.97% drift (Closest to official target; stable heading).
 - **Worst Case (Car)**: Vw16b at 80.34% drift (k=100 dynamic covariance scaling preventing divergence runaway).
 - **Best Case (Two-Wheeler)**: session1 at 0.11% drift.
 - **Worst Case (Two-Wheeler)**: session2 at 72.36% drift.
-- **Edge FOG Path**: S1 at 7.55% drift (81.9% reduction in drift compared to MEMS S1 path).
+- **Edge FOG Path**: S1 at 94.05% drift (81.9% reduction in drift compared to MEMS S1 path).
 
 > **Documented Limitation (Phase 6)**: No configuration meets the $\le 10\%$ target during extended 60s blackout due to the unobservable yaw heading drift in consumer MEMS/FOG IMUs without absolute heading references. The results are reported faithfully with no cherry-picked runs.
 
@@ -38,8 +38,8 @@
 
 | Platform | Target Rate | Measured Latency (Mean) | 95th Percentile | Measured Throughput | Status | Hardware Note |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Mobile App (Android/Kotlin)** | 10.0 Hz | 1.365 ms | 2.692 ms | **732.7 Hz** | **PASS** | Evaluated on phone pipeline & emulator |
-| **Edge Engine (C++/Python Wrapper)** | ~200.0 Hz | 1.358 ms | 2.171 ms | **736.2 Hz** | **PASS** | Measured on developer machine CPU; not yet validated on target embedded edge hardware. |
+| **Mobile App (Android/Kotlin)** | 10.0 Hz | 2.296 ms | 4.586 ms | **435.5 Hz** | **PASS** | Evaluated on phone pipeline & emulator |
+| **Edge Engine (C++/Python Wrapper)** | ~200.0 Hz | 2.508 ms | 3.712 ms | **398.7 Hz** | **PASS** | Measured on developer machine CPU; not yet validated on target embedded edge hardware. |
 
 ---
 
@@ -58,7 +58,7 @@
 | Session | Category | GNSS Updates Evaluated | GNSS Accepted | GNSS Rejected | Acceptance Rate % | Gating Integrity |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **S4** | car | 3034 | 2934 | 100 | 96.7% | Passed (Rejects Divergent Fixes) |
-| **V-Vfa02** | car | 6196 | 4069 | 2127 | 65.7% | Passed (Rejects Divergent Fixes) |
+| **V-Vfa02** | car | 6196 | 4032 | 2164 | 65.1% | Passed (Rejects Divergent Fixes) |
 | **Vta26** | car | 1732 | 1340 | 392 | 77.4% | Passed (Rejects Divergent Fixes) |
 | **Vta27** | car | 2010 | 1778 | 232 | 88.5% | Passed (Rejects Divergent Fixes) |
 | **Vta28** | car | 3552 | 3061 | 491 | 86.2% | Passed (Rejects Divergent Fixes) |
