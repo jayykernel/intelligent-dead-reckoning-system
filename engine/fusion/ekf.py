@@ -39,6 +39,7 @@ class ErrorStateEKF:
         self.sigma_acc_bias = sigma_acc_bias
         self.sigma_gyro_bias = sigma_gyro_bias
         self.gyro_mag_scale = 2.0  # Scale factor for dynamic gyro noise (0.0 for FOG-grade)
+        self.outage_scale = 1.0    # Outage covariance scaling factor (1.0 = nominal)
 
         # Nominal states
         self.p = np.zeros(3)  # Position ENU
@@ -218,6 +219,9 @@ class ErrorStateEKF:
         Q[9:12, 9:12] = np.eye(3) * (self.sigma_acc_bias**2 * dt)
         Q[12:15, 12:15] = np.eye(3) * (self.sigma_gyro_bias**2 * dt)
 
+        # Apply outage covariance scaling: increase process noise during GNSS outage
+        Q = Q * self.outage_scale
+
         # 7. Covariance propagation
         self.P = F @ self.P @ F.T + Q
         # Enforce symmetry and positive-definiteness
@@ -232,7 +236,8 @@ class ErrorStateEKF:
         R_cov: np.ndarray,
         update_type: str = "GNSS_POS",
         alpha: float = 0.01,
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        nis_multiplier: float = 1.0
     ) -> Tuple[bool, float, float]:
         """
         Generic measurement update with Chi-squared NIS innovation gating.
@@ -243,6 +248,7 @@ class ErrorStateEKF:
         R_cov: (M, M) Measurement noise covariance matrix
         update_type: Label for logging (e.g. "GNSS_POS", "GNSS_VEL", "MAG_HEADING", "AI_SPEED")
         alpha: Significance level for Chi-squared test (default 0.01 => 99% acceptance interval)
+        nis_multiplier: Multiplier for the chi2 threshold to loosen gating during reacquisition
 
         Returns:
         (passed_gate, nis_val, chi2_threshold)
@@ -269,7 +275,7 @@ class ErrorStateEKF:
             nis = float(y.T @ S_inv @ y)
 
         dof = len(z)
-        chi2_thresh = float(chi2.ppf(1.0 - alpha, df=dof))
+        chi2_thresh = float(chi2.ppf(1.0 - alpha, df=dof)) * nis_multiplier
         passed = nis <= chi2_thresh
 
         # Log NIS event
@@ -346,7 +352,8 @@ class ErrorStateEKF:
         p_gnss_enu: np.ndarray,
         sigma_pos: float = 3.0,
         alpha: float = 0.01,
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        nis_multiplier: float = 1.0
     ) -> Tuple[bool, float, float]:
         """Update with 3D GNSS Position measurement in ENU."""
         z = p_gnss_enu  # (3,)
@@ -355,14 +362,15 @@ class ErrorStateEKF:
         H[0:3, 0:3] = np.eye(3)
         R_cov = np.eye(3) * (sigma_pos**2)
 
-        return self.update(z, h_x, H, R_cov, update_type="GNSS_POS", alpha=alpha, timestamp=timestamp)
+        return self.update(z, h_x, H, R_cov, update_type="GNSS_POS", alpha=alpha, timestamp=timestamp, nis_multiplier=nis_multiplier)
 
     def update_gnss_velocity(
         self,
         v_gnss_enu: np.ndarray,
         sigma_vel: float = 0.5,
         alpha: float = 0.01,
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        nis_multiplier: float = 1.0
     ) -> Tuple[bool, float, float]:
         """Update with 3D GNSS Velocity measurement in ENU."""
         z = v_gnss_enu  # (3,)
@@ -371,7 +379,7 @@ class ErrorStateEKF:
         H[0:3, 3:6] = np.eye(3)
         R_cov = np.eye(3) * (sigma_vel**2)
 
-        return self.update(z, h_x, H, R_cov, update_type="GNSS_VEL", alpha=alpha, timestamp=timestamp)
+        return self.update(z, h_x, H, R_cov, update_type="GNSS_VEL", alpha=alpha, timestamp=timestamp, nis_multiplier=nis_multiplier)
 
     def update_heading(
         self,
@@ -379,7 +387,8 @@ class ErrorStateEKF:
         sigma_heading: float = np.radians(5.0),
         alpha: float = 0.01,
         timestamp: float = 0.0,
-        source: str = "MAG_HEADING"
+        source: str = "MAG_HEADING",
+        nis_multiplier: float = 1.0
     ) -> Tuple[bool, float, float]:
         """
         Update with absolute Heading measurement (geographic heading: 0 = North, +pi/2 = East, in rad).
@@ -403,7 +412,7 @@ class ErrorStateEKF:
 
         R_cov = np.array([[sigma_heading**2]])
 
-        return self.update(z, h_x, H, R_cov, update_type=source, alpha=alpha, timestamp=timestamp)
+        return self.update(z, h_x, H, R_cov, update_type=source, alpha=alpha, timestamp=timestamp, nis_multiplier=nis_multiplier)
 
     def update_ai_forward_speed(
         self,

@@ -88,6 +88,7 @@ class GNSSINSFusionEngine:
         self.mode_min_time_in_state = 1.0     # minimum seconds to stay in a state before allowing a transition back
         self.mode_current_state = "GNSS_AIDED"  # start in GNSS aided assuming we have good signal initially
         self.mode_time_in_state = 0.0
+        self.consecutive_gnss_rejections = 0
 
         # State histories for logging
         self.trajectory_pos = []
@@ -336,17 +337,43 @@ class GNSSINSFusionEngine:
         # The mode is now determined by the state machine
         mode = self.mode_current_state
 
+        # Adaptive outage covariance growth
+        if mode == "PURE_DEAD_RECKONING":
+            self.ekf.outage_scale = 5.0 # Increase process noise during outage
+        else:
+            self.ekf.outage_scale = 1.0
+
         if self.mode_current_state == "GNSS_AIDED" and is_gnss_available and gnss_pos_enu is not None:
             # Dynamically scale the measurement uncertainty based on trust
             # lower trust -> higher uncertainty -> less weight on GNSS
             dynamic_sigma_pos = 5.0 / max(0.1, np.sqrt(trust_score))
 
+            # Adaptive NIS reacquisition threshold based on consecutive rejections
+            reacq_multiplier = 1.0 + min(10.0, 0.5 * self.consecutive_gnss_rejections)
+
             gnss_pos_passed, _, _ = self.ekf.update_gnss_position(
                 p_gnss_enu=gnss_pos_enu,
                 sigma_pos=dynamic_sigma_pos,
                 alpha=0.01,
-                timestamp=timestamp
+                timestamp=timestamp,
+                nis_multiplier=reacq_multiplier
             )
+
+            if gnss_pos_passed:
+                self.consecutive_gnss_rejections = 0
+            else:
+                self.consecutive_gnss_rejections += 1
+                # Soft state correction / snap if repeatedly rejected but GNSS trust is high
+                if self.consecutive_gnss_rejections >= 5 and trust_score >= 0.7:
+                    # Apply bounded soft correction towards GNSS position
+                    pos_err = gnss_pos_enu - self.ekf.p
+                    soft_correction = np.clip(pos_err * 0.2, -5.0, 5.0)
+                    self.ekf.p += soft_correction
+                    # Also inflate position covariance to allow future updates to converge smoothly
+                    self.ekf.P[0:3, 0:3] += np.eye(3) * 10.0
+                    self.ekf._ensure_positive_definite()
+                    self.consecutive_gnss_rejections = 0
+
             if gnss_vel_enu is not None:
                 # Also scale velocity uncertainty slightly
                 dynamic_sigma_vel = 0.5 / max(0.2, trust_score)
@@ -354,7 +381,8 @@ class GNSSINSFusionEngine:
                     v_gnss_enu=gnss_vel_enu,
                     sigma_vel=dynamic_sigma_vel,
                     alpha=0.01,
-                    timestamp=timestamp
+                    timestamp=timestamp,
+                    nis_multiplier=reacq_multiplier
                 )
                 # GNSS Course-Over-Ground (COG) provides absolute heading
                 speed_2d = np.linalg.norm(gnss_vel_enu[:2])
@@ -372,7 +400,8 @@ class GNSSINSFusionEngine:
                         sigma_heading=sigma_heading,
                         alpha=0.01,
                         timestamp=timestamp,
-                        source="GNSS_HEADING"
+                        source="GNSS_HEADING",
+                        nis_multiplier=reacq_multiplier
                     )
 
         # Record histories
