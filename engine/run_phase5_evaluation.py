@@ -179,7 +179,8 @@ def run_evaluation(
         ])
         f_nav = R_veh_to_nav @ acc_veh
         # Gravity in nav frame
-        g_nav = np.array([0.0, 0.0, -9.80665])
+        from engine.config.constants import GRAVITY_MS2
+        g_nav = np.array([0.0, 0.0, -GRAVITY_MS2])
         a_nav = f_nav + g_nav
 
         # --- Predict velocity ---

@@ -6,6 +6,7 @@ import os
 # Add engine directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
+from engine.config.constants import GRAVITY_MS2
 from engine.fusion.ekf import ErrorStateEKF
 from engine.nhc_zupt.lean_ekf import LeanAngleEKF
 
@@ -14,7 +15,7 @@ def test_long_ins_propagation():
     ekf = ErrorStateEKF(dt=0.1)
 
     # 10,000 steps of pure INS
-    acc = np.array([0.1, -0.05, 9.80665])
+    acc = np.array([0.1, -0.05, GRAVITY_MS2])
     gyro = np.array([0.01, -0.01, 0.02])
 
     for i in range(10000):
@@ -60,7 +61,7 @@ def test_repeated_prediction_update_cycles():
         acc = np.array([
             2.0 * np.sin(cycle * 0.1),
             1.5 * np.cos(cycle * 0.1),
-            9.80665 + 0.5 * np.sin(cycle * 0.05)
+            GRAVITY_MS2 + 0.5 * np.sin(cycle * 0.05)
         ])
         gyro = np.array([
             0.1 * np.cos(cycle * 0.05),
@@ -130,7 +131,7 @@ def test_lean_angle_ekf_numerical_stability():
 
         if i % 2 == 0:
             acc_x = 1.0 * np.sin(i * 0.02)
-            acc_z = 9.8 + 0.2 * np.cos(i * 0.01)
+            acc_z = GRAVITY_MS2 + 0.2 * np.cos(i * 0.01)
             speed = max(0.0, 10.0 + 5.0 * np.sin(i * 0.05))
             gyro_z = 0.1 * np.cos(i * 0.02)
             lean_ekf.update(acc_x, acc_z, speed=speed, gyro_z=gyro_z)

@@ -1,5 +1,6 @@
 import numpy as np
 from typing import Dict, Tuple, Optional
+from engine.config.constants import GRAVITY_MS2
 
 class CalibrationEngine:
     """
@@ -126,8 +127,8 @@ class CalibrationEngine:
         # Accel bias in vehicle frame:
         # Since we perfectly align Vehicle Z with g_phone, X and Y read 0 when stationary.
         # However, Z reads norm(g_phone).
-        # Standard gravity in our EKF is 9.80665, so the difference is a sensor scale/bias error.
-        self.accel_bias = np.array([0.0, 0.0, np.linalg.norm(g_phone) - 9.80665], dtype=np.float64)
+        # Standard gravity in our EKF is GRAVITY_MS2, so the difference is a sensor scale/bias error.
+        self.accel_bias = np.array([0.0, 0.0, np.linalg.norm(g_phone) - GRAVITY_MS2], dtype=np.float64)
 
         return True
 

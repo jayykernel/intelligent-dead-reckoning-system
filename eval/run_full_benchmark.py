@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from engine.calibration.calibrator import CalibrationEngine
+from engine.config.constants import GRAVITY_MS2
 from engine.fusion.fusion_engine import GNSSINSFusionEngine
 from edge.edge_engine import EdgeFusionEngine
 from engine.map_matching.hmm_matcher import HMMMapMatcher
@@ -741,7 +742,7 @@ def benchmark_update_rates():
     for i in range(N_edge):
         t0 = time.perf_counter()
         edge_engine.step(
-            acc_raw=np.array([0.0, 0.0, 9.80665]),
+            acc_raw=np.array([0.0, 0.0, GRAVITY_MS2]),
             gyro_raw=np.array([0.0, 0.0, 0.0]),
             gnss_pos_enu=np.array([i * 0.05, 0.0, 0.0]) if i % 200 == 0 else None,
             gnss_vel_enu=np.array([10.0, 0.0, 0.0]) if i % 200 == 0 else None,

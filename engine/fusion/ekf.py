@@ -22,6 +22,23 @@ Features:
 import numpy as np
 from typing import Dict, Tuple, Optional, List
 from scipy.stats import chi2
+from engine.config.constants import (
+    GRAVITY_MS2,
+    SIGMA_ACC,
+    SIGMA_GYRO,
+    SIGMA_ACC_BIAS,
+    SIGMA_GYRO_BIAS,
+    INIT_POS_STD_M,
+    INIT_VEL_STD_MS,
+    INIT_ATT_STD_DEG,
+    INIT_ACC_BIAS_STD_MS2,
+    INIT_GYRO_BIAS_STD_RADS,
+    ALPHA_NIS,
+    MAX_NIS_RATIO,
+    MAX_ACC_MAGNITUDE,
+    MAX_GYRO_MAGNITUDE,
+    MAX_MAG_MAGNITUDE
+)
 
 
 class ErrorStateEKF:
@@ -58,7 +75,7 @@ class ErrorStateEKF:
         self.P[12:15, 12:15] = np.eye(3) * 0.01**2 # Gyro bias initial std 0.01 rad/s
 
         # Gravity in navigation frame (ENU: Z is Up)
-        self.g_nav = np.array([0.0, 0.0, -9.80665])
+        self.g_nav = np.array([0.0, 0.0, -GRAVITY_MS2])
 
         # Logging for NIS gating
         self.nis_history: List[Dict] = []

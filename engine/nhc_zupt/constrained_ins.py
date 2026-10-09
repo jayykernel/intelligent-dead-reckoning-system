@@ -13,6 +13,7 @@ Output: constrained velocity in vehicle frame (v_constrained)
 """
 
 import numpy as np
+from engine.config.constants import GRAVITY_MS2
 
 class ConstrainedINS:
     def __init__(self, dt: float = 0.1, zupt_speed_threshold: float = 0.5, zupt_acc_threshold: float = 0.5, zupt_gyro_threshold: float = 0.1):
@@ -20,7 +21,7 @@ class ConstrainedINS:
         self.zupt_speed_threshold = zupt_speed_threshold
         self.zupt_acc_threshold = zupt_acc_threshold
         self.zupt_gyro_threshold = zupt_gyro_threshold
-        self.g = 9.80665
+        self.g = GRAVITY_MS2
 
     def _is_stopped(self, acc_veh: np.ndarray, gyro_veh: np.ndarray, v_veh: np.ndarray = None, ai_speed: float = None, vehicle_type: str = 'car') -> bool:
         """

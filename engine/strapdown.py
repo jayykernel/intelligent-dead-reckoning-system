@@ -8,6 +8,7 @@ non-holonomic constraints (NHC) — serving as the unconstrained baseline.
 
 from typing import Dict, Tuple, Optional, Union
 import numpy as np
+from engine.config.constants import GRAVITY_MS2
 
 
 def quat_mult(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
@@ -90,7 +91,7 @@ class StrapdownINS:
         quaternion: [qw, qx, qy, qz] representing Body -> ENU rotation
     """
 
-    def __init__(self, gravity: float = 9.80665):
+    def __init__(self, gravity: float = GRAVITY_MS2):
         self.g = float(gravity)
         self.g_n = np.array([0.0, 0.0, -self.g], dtype=np.float64)
         self.pos = np.zeros(3, dtype=np.float64)
