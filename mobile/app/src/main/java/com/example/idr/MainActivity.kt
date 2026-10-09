@@ -12,6 +12,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.widget.Button
 import android.widget.ProgressBar
@@ -71,6 +72,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
 
     private val fusionEngine = FusionEngine(dt = 0.1, enableAi = true)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val fusionThread = HandlerThread("FusionThread").apply { start() }
+    private lateinit var fusionHandler: Handler
+    private val sensorDataLock = Object()
+    private val fusionResultLock = Object()
+    private var latestFusionPos = DoubleArray(3) { 0.0 }
 
     // Hardware Managers
     private lateinit var sensorManager: SensorManager
@@ -137,28 +143,35 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                 hasNewGnssMeasurement = false
 
                 // Step ES-EKF with real Accelerometer, Gyroscope and GPS
-                val result = fusionEngine.step(
-                    accRaw = latestAccRaw.copyOf(),
-                    gyroRaw = latestGyroRaw.copyOf(),
-                    gnssPosEnu = gnssPos,
-                    gnssVelEnu = gnssVel,
-                    isGnssAvailable = isGnssAvailable,
-                    timestamp = simTime,
-                    gnssAccM = latestGnssAccM,
-                    gnssSatCount = latestGnssSatCount,
-                    gnssAvgCn0 = latestGnssAvgCn0
-                )
+                val result = synchronized(sensorDataLock) {
+                    fusionEngine.step(
+                        accRaw = latestAccRaw.copyOf(),
+                        gyroRaw = latestGyroRaw.copyOf(),
+                        gnssPosEnu = gnssPos,
+                        gnssVelEnu = gnssVel,
+                        isGnssAvailable = isGnssAvailable,
+                        timestamp = simTime,
+                        gnssAccM = latestGnssAccM,
+                        gnssSatCount = latestGnssSatCount,
+                        gnssAvgCn0 = latestGnssAvgCn0
+                    )
+                }
 
-                renderFusionOutput(result)
+                mainHandler.post {
+                    renderFusionOutput(result)
+                }
 
             } else {
                 // ==========================================
                 // 2. DEMO SIMULATION LOOP PIPELINE
                 // ==========================================
-                runDemoSimulationStep()
+                val result = runDemoSimulationStep()
+                mainHandler.post {
+                    renderFusionOutput(result)
+                }
             }
 
-            mainHandler.postDelayed(this, 100) // 10 Hz
+            fusionHandler.postDelayed(this, 100) // 10 Hz
         }
     }
 
@@ -203,6 +216,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         rotVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
+        // Initialize fusion handler on background thread
+        fusionHandler = Handler(fusionThread.looper)
+        fusionHandler.post(fusionLoopRunnable)
+
         // Request Location Permissions
         checkAndRequestPermissions()
 
@@ -246,8 +263,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                 mapView.controller.animateTo(GeoPoint(lat, lon), 18.0, 500L)
             }
         }
-
-        mainHandler.post(fusionLoopRunnable)
     }
 
     private fun checkAndRequestPermissions() {
@@ -307,7 +322,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
 
     override fun onDestroy() {
         super.onDestroy()
-        mainHandler.removeCallbacks(fusionLoopRunnable)
+        fusionHandler.removeCallbacks(fusionLoopRunnable)
+        fusionThread.quitSafely()
         try { locationManager.removeUpdates(this) } catch (e: Exception) {}
         mapView.onDetach()
     }
@@ -317,16 +333,24 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
     // ==========================================
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
+
+        // Sanitize sensor data before processing
+        if (!sanitizeSensorEvent(event)) return
+
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                latestAccRaw[0] = event.values[0].toDouble()
-                latestAccRaw[1] = event.values[1].toDouble()
-                latestAccRaw[2] = event.values[2].toDouble()
+                synchronized(sensorDataLock) {
+                    latestAccRaw[0] = event.values[0].toDouble()
+                    latestAccRaw[1] = event.values[1].toDouble()
+                    latestAccRaw[2] = event.values[2].toDouble()
+                }
             }
             Sensor.TYPE_GYROSCOPE -> {
-                latestGyroRaw[0] = event.values[0].toDouble()
-                latestGyroRaw[1] = event.values[1].toDouble()
-                latestGyroRaw[2] = event.values[2].toDouble()
+                synchronized(sensorDataLock) {
+                    latestGyroRaw[0] = event.values[0].toDouble()
+                    latestGyroRaw[1] = event.values[1].toDouble()
+                    latestGyroRaw[2] = event.values[2].toDouble()
+                }
             }
             Sensor.TYPE_ROTATION_VECTOR -> {
                 val qArray = FloatArray(4)
@@ -338,7 +362,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
                     qArray[2].toDouble(),
                     qArray[3].toDouble()
                 )
-                fusionEngine.updateAttitudeFromSensors(qAttitude)
+                // Validate quaternion is finite
+                if (qAttitude.all { it.isFinite() }) {
+                    fusionEngine.updateAttitudeFromSensors(qAttitude)
+                }
             }
         }
     }
@@ -346,9 +373,69 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     // ==========================================
+    // SENSOR SANITIZATION
+    // ==========================================
+    /**
+     * Validates sensor event data before it reaches the fusion engine.
+     * Returns true if data is valid, false if data should be rejected.
+     */
+    private fun sanitizeSensorEvent(event: SensorEvent): Boolean {
+        // Check for null or empty values
+        if (event.values.isNullOrEmpty()) {
+            return false
+        }
+
+        // Validate each value is finite (no NaN or Inf)
+        for (value in event.values) {
+            if (!value.isFinite()) {
+                return false
+            }
+        }
+
+        // Range validation based on sensor type
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                // Accelerometer: expect ~9.81 m/s² gravity, max reasonable ~50 m/s² (5g)
+                val norm = Math.sqrt(event.values[0]*event.values[0] +
+                                     event.values[1]*event.values[1] +
+                                     event.values[2]*event.values[2])
+                if (norm > 50.0 || norm < 0.1) {
+                    // Unreasonable acceleration magnitude
+                    return false
+                }
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                // Gyroscope: max reasonable ~35 rad/s (2000 deg/s typical MEMS range)
+                val norm = Math.sqrt(event.values[0]*event.values[0] +
+                                     event.values[1]*event.values[1] +
+                                     event.values[2]*event.values[2])
+                if (norm > 35.0) {
+                    return false
+                }
+            }
+            Sensor.TYPE_ROTATION_VECTOR -> {
+                // Rotation vector should have 4 or 5 elements (x,y,z,w or x,y,z,w,heading_accuracy)
+                if (event.values.size < 4 || event.values.size > 5) {
+                    return false
+                }
+            }
+        }
+
+        // Timestamp validation
+        if (event.timestamp <= 0) {
+            return false
+        }
+
+        return true
+    }
+
+    // ==========================================
     // LOCATION LISTENER (REAL PHONE GPS FIX)
     // ==========================================
     override fun onLocationChanged(location: Location) {
+        // Sanitize GNSS location before processing
+        if (!sanitizeGnssLocation(location)) return
+
         val lat = location.latitude
         val lon = location.longitude
         val alt = location.altitude
@@ -389,6 +476,70 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         latestGnssAvgCn0 = 36.0
         isGpsFixAcquired = true
         hasNewGnssMeasurement = true
+    }
+
+    // ==========================================
+    // GNSS LOCATION SANITIZATION
+    // ==========================================
+    /**
+     * Validates GNSS location data before it reaches the fusion engine.
+     * Returns true if data is valid, false if the fix should be rejected.
+     */
+    private fun sanitizeGnssLocation(location: Location): Boolean {
+        // Validate lat/lon are finite and within valid geodetic range
+        if (!location.latitude.isFinite() || !location.longitude.isFinite()) {
+            return false
+        }
+        if (location.latitude < -90.0 || location.latitude > 90.0) {
+            return false
+        }
+        if (location.longitude < -180.0 || location.longitude > 180.0) {
+            return false
+        }
+
+        // Reject null-island fixes (lat=0, lon=0 exactly — extremely unlikely to be real)
+        if (location.latitude == 0.0 && location.longitude == 0.0) {
+            return false
+        }
+
+        // Validate altitude if present (reject extreme values)
+        if (location.hasAltitude()) {
+            val alt = location.altitude
+            if (!alt.isFinite() || alt < -500.0 || alt > 100000.0) {
+                return false
+            }
+        }
+
+        // Validate accuracy if present
+        if (location.hasAccuracy()) {
+            val acc = location.accuracy.toDouble()
+            if (!acc.isFinite() || acc <= 0.0 || acc > 1000.0) {
+                return false
+            }
+        }
+
+        // Validate speed if present (max ~340 m/s = speed of sound, generous bound)
+        if (location.hasSpeed()) {
+            val speed = location.speed.toDouble()
+            if (!speed.isFinite() || speed < 0.0 || speed > 340.0) {
+                return false
+            }
+        }
+
+        // Validate bearing if present
+        if (location.hasBearing()) {
+            val bearing = location.bearing.toDouble()
+            if (!bearing.isFinite() || bearing < 0.0 || bearing > 360.0) {
+                return false
+            }
+        }
+
+        // Validate timestamp (must be positive and not in the far future)
+        if (location.time <= 0) {
+            return false
+        }
+
+        return true
     }
 
     // ==========================================
@@ -438,7 +589,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         }
     }
 
-    private fun runDemoSimulationStep() {
+    private fun runDemoSimulationStep(): Map<String, Any> {
         val cycleT = simTime % 60.0
         val targetYawRad = when {
             cycleT < 15.0 -> 0.0
@@ -466,7 +617,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
         val isGnssAvailable = !isOutageSimulated
         if (isOutageSimulated) outageElapsed += 0.1 else outageElapsed = 0.0
 
-        val result = fusionEngine.step(
+        return fusionEngine.step(
             accRaw = accRaw,
             gyroRaw = gyroRaw,
             gnssPosEnu = if (isGnssAvailable) truePosEnu else null,
@@ -477,8 +628,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener, LocationListener 
             gnssSatCount = if (isGnssAvailable) 14 else 0,
             gnssAvgCn0 = if (isGnssAvailable) 38.0 else 0.0
         )
-
-        renderFusionOutput(result)
     }
 
     private fun updateMap(p: DoubleArray) {
