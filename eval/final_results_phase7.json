@@ -1,0 +1,126 @@
+[
+  {
+    "category": "CAR",
+    "session": "S4",
+    "outage_dist_m": 2.34,
+    "final_error_m": 314.1,
+    "drift_pct": 31.41
+  },
+  {
+    "category": "CAR",
+    "session": "V-Vfa02",
+    "outage_dist_m": 1483.63,
+    "final_error_m": 871.48,
+    "drift_pct": 58.74
+  },
+  {
+    "category": "CAR",
+    "session": "Vta26",
+    "outage_dist_m": 2.8,
+    "final_error_m": 68.85,
+    "drift_pct": 6.89
+  },
+  {
+    "category": "CAR",
+    "session": "Vta27",
+    "outage_dist_m": 850.39,
+    "final_error_m": 73.12,
+    "drift_pct": 8.6
+  },
+  {
+    "category": "CAR",
+    "session": "Vta28",
+    "outage_dist_m": 697.16,
+    "final_error_m": 465.15,
+    "drift_pct": 66.72
+  },
+  {
+    "category": "CAR",
+    "session": "Vta29",
+    "outage_dist_m": 468.35,
+    "final_error_m": 363.25,
+    "drift_pct": 77.56
+  },
+  {
+    "category": "CAR",
+    "session": "Vta30",
+    "outage_dist_m": 91.26,
+    "final_error_m": 62.51,
+    "drift_pct": 68.5
+  },
+  {
+    "category": "CAR",
+    "session": "Vtb11",
+    "outage_dist_m": 208.47,
+    "final_error_m": 17.66,
+    "drift_pct": 8.47
+  },
+  {
+    "category": "CAR",
+    "session": "Vtb12",
+    "outage_dist_m": 159.32,
+    "final_error_m": 51.14,
+    "drift_pct": 32.1
+  },
+  {
+    "category": "CAR",
+    "session": "Vw15",
+    "outage_dist_m": 3.72,
+    "final_error_m": 90.98,
+    "drift_pct": 9.1
+  },
+  {
+    "category": "CAR",
+    "session": "Vw16a",
+    "outage_dist_m": 1187.04,
+    "final_error_m": 250.88,
+    "drift_pct": 21.13
+  },
+  {
+    "category": "CAR",
+    "session": "Vw16b",
+    "outage_dist_m": 752.38,
+    "final_error_m": 604.56,
+    "drift_pct": 80.35
+  },
+  {
+    "category": "CAR",
+    "session": "Vw17",
+    "outage_dist_m": 151.28,
+    "final_error_m": 1.46,
+    "drift_pct": 0.96
+  },
+  {
+    "category": "TWO_WHEELER",
+    "session": "session1",
+    "outage_dist_m": 231.32,
+    "final_error_m": 0.25,
+    "drift_pct": 0.11
+  },
+  {
+    "category": "TWO_WHEELER",
+    "session": "session2",
+    "outage_dist_m": 211.11,
+    "final_error_m": 152.76,
+    "drift_pct": 72.36
+  },
+  {
+    "category": "edge_fog",
+    "session": "unknown",
+    "outage_dist_m": 353.15,
+    "final_error_m": 332.12,
+    "drift_pct": 94.05
+  },
+  {
+    "category": "throughput",
+    "session": "mobile",
+    "mean_ms": 1.849,
+    "throughput_hz": 540.9
+  },
+  {
+    "category": "throughput",
+    "session": "edge",
+    "mean_ms": 2.169,
+    "throughput_hz": 461.0
+  }
+]

@@ -1,0 +1,218 @@
+==================================================================
+PHASE 13: FULL BENCHMARK VALIDATION (TEST)
+==================================================================
+
+--- Evaluating CAR: S4 ---
+  WARNING: Not enough strong forward acceleration to identify vehicle Y-axis.
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(-15.1, -57.5, 29.8) uT, quality=0.85
+  Road Network loaded: 1 segments (synthetic=True)
+  Mag calibration transferred: quality=0.85
+[S4] Entering outage. speed_scale=1.000
+  Outage duration: 60.0s (141.9s to 201.9s)
+  Distance travelled: 2.34 m [STATIONARY/IDLING <50m]
+  Final position error: 314.10 m
+  Drift %: 31.41 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 2934/3034 (96.7%)
+
+--- Evaluating CAR: V-Vfa02 ---
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(-22.1, -40.5, 38.1) uT, quality=0.10
+  Road Network loaded: 14672 segments (synthetic=True)
+  Mag calibration transferred: quality=0.10
+[V-Vfa02] Entering outage. speed_scale=1.429
+  Outage duration: 60.0s (300.0s to 360.0s)
+  Distance travelled: 1483.63 m
+  Final position error: 871.48 m
+  Drift %: 58.74 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 3984/6196 (64.3%)
+
+--- Evaluating CAR: Vta26 ---
+  WARNING: Forward acceleration is co-linear with gravity or too weak. Cannot align.
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(6.4, -36.1, -12.9) uT, quality=0.35
+  Road Network loaded: 95 segments (synthetic=True)
+  Mag calibration transferred: quality=0.35
+[Vta26] Entering outage. speed_scale=0.504
+  Outage duration: 60.0s (76.8s to 136.8s)
+  Distance travelled: 2.80 m [STATIONARY/IDLING <50m]
+  Final position error: 68.85 m
+  Drift %: 6.89 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 1340/1732 (77.4%)
+
+--- Evaluating CAR: Vta27 ---
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(6.7, -37.7, -15.3) uT, quality=0.10
+  Road Network loaded: 264 segments (synthetic=True)
+  Mag calibration transferred: quality=0.10
+[Vta27] Entering outage. speed_scale=0.670
+  Outage duration: 60.0s (90.7s to 150.7s)
+  Distance travelled: 850.39 m
+  Final position error: 73.12 m
+  Drift %: 8.60 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 1778/2010 (88.5%)
+
+--- Evaluating CAR: Vta28 ---
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(7.7, -11.9, -1.8) uT, quality=0.85
+  Road Network loaded: 372 segments (synthetic=True)
+  Mag calibration transferred: quality=0.85
+[Vta28] Entering outage. speed_scale=0.766
+  Outage duration: 60.0s (167.8s to 227.8s)
+  Distance travelled: 697.16 m
+  Final position error: 465.15 m
+  Drift %: 66.72 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 3061/3552 (86.2%)
+
+--- Evaluating CAR: Vta29 ---
+  WARNING: Magnetometer data lacks angular excitation (spread=[10.98519603  4.85663364 28.40479999]). Calibration skipped.
+  Road Network loaded: 2419 segments (synthetic=True)
+[Vta29] Entering outage. speed_scale=0.448
+  Outage duration: 60.0s (300.0s to 360.0s)
+  Distance travelled: 468.35 m
+  Final position error: 363.25 m
+  Drift %: 77.56 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 5695/6196 (91.9%)
+
+--- Evaluating CAR: Vta30 ---
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(-8.9, -34.9, 1.8) uT, quality=0.10
+  Road Network loaded: 1101 segments (synthetic=True)
+  Mag calibration transferred: quality=0.10
+[Vta30] Entering outage. speed_scale=0.311
+  Outage duration: 60.0s (300.0s to 360.0s)
+  Distance travelled: 91.26 m
+  Final position error: 62.51 m
+  Drift %: 68.50 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 4438/6196 (71.6%)
+
+--- Evaluating CAR: Vtb11 ---
+  WARNING: Magnetometer data lacks angular excitation (spread=[ 9.05440024  4.60614699 15.0800021 ]). Calibration skipped.
+  Road Network loaded: 59 segments (synthetic=True)
+[Vtb11] Entering outage. speed_scale=0.979
+  Outage duration: 60.0s (13.7s to 24.4s)
+  Distance travelled: 208.47 m
+  Final position error: 17.66 m
+  Drift %: 8.47 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 357/470 (76.0%)
+
+--- Evaluating CAR: Vtb12 ---
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(-24.6, -41.3, 8.3) uT, quality=0.10
+  Road Network loaded: 47 segments (synthetic=True)
+  Mag calibration transferred: quality=0.10
+[Vtb12] Entering outage. speed_scale=0.866
+  Outage duration: 60.0s (17.2s to 33.0s)
+  Distance travelled: 159.32 m
+  Final position error: 51.14 m
+  Drift %: 32.10 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 341/540 (63.1%)
+
+--- Evaluating CAR: Vw15 ---
+  WARNING: Not enough strong forward acceleration to identify vehicle Y-axis.
+  WARNING: Magnetometer data lacks angular excitation (spread=[2.55999999 2.25       2.17999998]). Calibration skipped.
+  Road Network loaded: 1 segments (synthetic=True)
+[Vw15] Entering outage. speed_scale=1.000
+  Outage duration: 60.0s (54.4s to 114.4s)
+  Distance travelled: 3.72 m [STATIONARY/IDLING <50m]
+  Final position error: 90.98 m
+  Drift %: 9.10 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 1260/1284 (98.1%)
+
+--- Evaluating CAR: Vw16a ---
+  WARNING: Magnetometer data lacks angular excitation (spread=[19.84819702  5.68010296 14.9011111 ]). Calibration skipped.
+  Road Network loaded: 765 segments (synthetic=True)
+[Vw16a] Entering outage. speed_scale=0.838
+  Outage duration: 60.0s (231.0s to 291.0s)
+  Distance travelled: 1187.04 m
+  Final position error: 250.88 m
+  Drift %: 21.13 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 4502/4816 (93.5%)
+
+--- Evaluating CAR: Vw16b ---
+  WARNING: Magnetometer data lacks angular excitation (spread=[ 7.26889999  6.07929998 14.86558787]). Calibration skipped.
+  Road Network loaded: 172 segments (synthetic=True)
+[Vw16b] Entering outage. speed_scale=0.796
+  Outage duration: 60.0s (44.9s to 102.4s)
+  Distance travelled: 752.38 m
+  Final position error: 604.56 m
+  Drift %: 80.35 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 612/1094 (55.9%)
+
+--- Evaluating CAR: Vw17 ---
+  WARNING: Magnetometer data lacks angular excitation (spread=[2.12       3.24009901 4.68006831]). Calibration skipped.
+  Road Network loaded: 48 segments (synthetic=True)
+[Vw17] Entering outage. speed_scale=0.870
+  Outage duration: 60.0s (12.4s to 21.2s)
+  Distance travelled: 151.28 m
+  Final position error: 1.46 m
+  Drift %: 0.96 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 427/444 (96.2%)
+
+--- Evaluating TWO_WHEELER: session1 ---
+  WARNING: Magnetometer ellipsoid fit produced non-positive-definite matrix (degenerate planar data).
+  Attempting 2D planar circle fit fallback for horizontal hard-iron estimation...
+  2D planar magnetometer calibration: hard_iron=(17.2, 3.9, 5.9) uT, quality=0.10
+  Road Network loaded: 158 segments (synthetic=True)
+  Mag calibration transferred: quality=0.10
+[session1] Entering outage. speed_scale=0.197
+  Outage duration: 60.0s (134.3s to 194.3s)
+  Distance travelled: 231.32 m
+  Final position error: 0.25 m
+  Drift %: 0.11 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 2797/2882 (97.1%)
+
+--- Evaluating TWO_WHEELER: session2 ---
+  Magnetometer calibration: hard_iron=(2.1, 1.8, 3.2) uT, quality=0.78
+  Road Network loaded: 34 segments (synthetic=True)
+  Mag calibration transferred: quality=0.78
+[session2] Entering outage. speed_scale=0.067
+  Outage duration: 60.0s (69.4s to 129.4s)
+  Distance travelled: 211.11 m
+  Final position error: 152.76 m
+  Drift %: 72.36 % (Target: <= 10.0%)
+  NIS GNSS Acceptance: 1484/1584 (93.7%)
+
+--- Evaluating EDGE ENGINE (Synthetic FOG 200Hz): S1 ---
+  Outage duration: 60.0s (60.0s to 120.0s)
+  Distance travelled: 353.15 m
+  Final position error: 332.12 m
+  Drift %: 94.05 % (Target: <= 10.0%)
+
+==================================================================
+BENCHMARK: FUSION UPDATE RATE & WALL-CLOCK THROUGHPUT
+==================================================================
+Mobile Engine (10Hz target):
+  Mean latency: 2.164 ms (Budget: 100.0 ms)
+  95th percentile: 4.368 ms
+  Throughput: 462.1 Hz (Target: >= 10.0 Hz) -> PASS
+
+Edge Engine (~200Hz target - Development Hardware CPU):
+  Mean latency: 2.680 ms (Budget: 5.0 ms)
+  95th percentile: 3.956 ms
+  Throughput: 373.2 Hz (Target: >= 200.0 Hz) -> PASS
+
+==================================================================
+BENCHMARK: MODE TRANSITION & COVARIANCE DYNAMICS
+==================================================================
+Mode Transition Latencies:
+  Flag-flip latency: 0.1 s (1 epoch, dwell-limited)
+  Outage covariance expansion: Baseline 1.427 m^2 -> Peak 25.002 m^2 (17.5x)
+  Reacquisition settling: Variance returned to < 2x baseline within 1.2s
+
+--- Generating Benchmark Plots in eval/plots/ ---
+Saved eval/plots/benchmark_drift_summary.png
+Saved eval/plots/benchmark_car_trajectories.png
+Saved eval/plots/benchmark_tw_trajectories.png
+Saved eval/plots/benchmark_edge_fog.png
+Saved eval/plots/benchmark_mode_transitions.png
+
+Saved report to eval/FULL_BENCHMARK_RESULTS.md
+Saved report to docs/PHASE13_RESULTS.md
