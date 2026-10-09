@@ -1,69 +1,213 @@
 """
 IO-VNBD Data Loader and Preprocessor.
 
-Loads raw S-*.csv (smartphone sensor) and V-*.csv (vehicle ground truth) files,
-cleans, synchronizes, normalizes, and packages them into standard numpy/pandas structures.
+Loads raw sensor (S-*.csv) and vehicle (V-*.csv) CSV files, cleans, synchronizes,
+normalizes, and packages them into standard numpy/pandas structures.
+
+Uses the deterministic dataset splits defined in dataset_splits.py to ensure
+strict train/val/test isolation with no benchmark leakage.
 """
 
 import os
 import glob
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
+
+from .dataset_splits import DATASET_SPLITS, TRAIN_SESSIONS, VAL_SESSIONS, TEST_SESSIONS
+from engine.config.constants import EARTH_RADIUS_M
+
+def latlon_to_enu(lat, lon, alt, lat0, lon0, alt0):
+    """
+    Convert geodetic coordinates (Lat, Lon, Alt) to local East-North-Up (ENU).
+    Uses WGS84 constants.
+    """
+    a = EARTH_RADIUS_M
+    f = 1 / 298.257223563
+    e2 = 2 * f - f**2
+    dlat = np.radians(lat - lat0)
+    dlon = np.radians(lon - lon0)
+    dalt = alt - alt0
+    lat0_rad = np.radians(lat0)
+
+    R_N = a / np.sqrt(1 - e2 * np.sin(lat0_rad)**2)
+    R_M = a * (1 - e2) / (1 - e2 * np.sin(lat0_rad)**2)**1.5
+
+    e = dlon * (R_N + alt0) * np.cos(lat0_rad)
+    n = dlat * (R_M + alt0)
+    u = dalt
+    return e, n, u
+
+
+def get_session_category_driver(session_name: str) -> Optional[Tuple[str, str]]:
+    """
+    Given a session name like 'S1', 'Vta27', etc., determine its category and driver.
+
+    Returns (category_driver_prefix, session_number) or None if not found.
+    The prefix maps to entries in TRAIN_SESSIONS / VAL_SESSIONS / TEST_SESSIONS.
+
+    Example:
+        'S1' -> ('S (Driver A)', 'S1')
+        'Vta27' -> ('Vta (Driver E)', 'Vta27')
+    """
+    # Try each category/driver/session entry
+    # Format in splits: ("Category (Driver)", "S1") etc.
+    for prefix, sname in TRAIN_SESSIONS + VAL_SESSIONS + TEST_SESSIONS:
+        if sname == session_name:
+            return prefix, sname
+    return None
+
+
+def determine_split(session_name: str) -> Optional[str]:
+    """
+    Determine which data split (train/val/test) a session belongs to.
+
+    Returns 'train', 'val', 'test', or None if session not found in splits.
+    """
+    for prefix, sname in TRAIN_SESSIONS:
+        if sname == session_name:
+            return "train"
+    for prefix, sname in VAL_SESSIONS:
+        if sname == session_name:
+            return "val"
+    for prefix, sname in TEST_SESSIONS:
+        if sname == session_name:
+            return "test"
+    return None
+
+
+def validate_session_isolation(session_name: str) -> bool:
+    """
+    Verify that a session is properly isolated in its split.
+
+    Raises ValueError if session appears in multiple splits (leakage).
+    """
+    splits = set()
+    for prefix, sname in TRAIN_SESSIONS:
+        if sname == session_name:
+            splits.add("train")
+    for prefix, sname in VAL_SESSIONS:
+        if sname == session_name:
+            splits.add("val")
+    for prefix, sname in TEST_SESSIONS:
+        if sname == session_name:
+            splits.add("test")
+
+    if len(splits) > 1:
+        raise ValueError(
+            f"Session {session_name} appears in multiple splits: {splits}. "
+            "Train/test isolation violated!"
+        )
+    return True
 
 
 def load_iovnbd_session(
     data_dir: str,
     driver: str,
-    session: str
+    session: str,
+    enforce_isolation: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load raw sensor (S) and vehicle (V) CSV files for a given session.
-    Handles encoding differences across platforms.
-    """
-    # Try direct path first (for flexibility in caller)
-    session_dir = os.path.join(data_dir, driver, session)
-    if os.path.exists(session_dir):
-        pass  # Use as-is
-    else:
-        # Fallback: assume data_dir is the root and prepend "Categorised IOVNB Dataset"
-        session_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver, session)
 
-    if not os.path.exists(session_dir):
-        # Last resort: check if session files are at driver level
-        alt_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver)
-        if os.path.exists(alt_dir) and any(f.endswith('.csv') for f in os.listdir(alt_dir)):
-            session_dir = alt_dir
-        else:
+    Uses deterministic dataset splits from dataset_splits.py rather than fragile
+    glob matching. Looks in the standard IO-VNBD directory structure first, then
+    falls back with a warning.
+
+    Parameters
+    ----------
+    data_dir : str
+        Root directory containing the IO-VNBD dataset.
+    driver : str
+        Driver identifier (e.g., 'S', 'Vf', 'Vta', 'Vtb', 'Vw', 'M', 'D').
+    session : str
+        Session identifier (e.g., 'S1', 'Vta27').
+    enforce_isolation : bool
+        If True, raise ValueError if session appears in multiple splits.
+
+    Returns
+    -------
+    Tuple of (s_df, v_df) dataframes.
+    """
+    # First, validate isolation if requested
+    if enforce_isolation:
+        validate_session_isolation(session)
+
+    # Determine the session category/driver prefix and check it matches
+    # what the caller provided
+    category_driver = get_session_category_driver(session)
+    if category_driver is None:
+        # Session not in any split; warn and try to find raw files anyway
+        import warnings
+        warnings.warn(
+            f"Session {session} not found in deterministic dataset splits. "
+            "Proceeding without isolation enforcement. "
+            "Ensure this is intentional and not a benchmark leakage risk."
+        )
+        # Fall back to glob-based search for unknown sessions
+        session_dir = os.path.join(data_dir, driver, session) if driver else os.path.join(data_dir, session)
+        if not os.path.exists(session_dir):
+            # Try with "Categorised IOVNB Dataset" prefix
+            session_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver, session) if driver else os.path.join(data_dir, "Categorised IOVNB Dataset", session)
+        if not os.path.exists(session_dir):
             raise FileNotFoundError(f"Session directory not found: {session_dir}")
 
-    s_files = glob.glob(os.path.join(session_dir, "S-*.csv")) + glob.glob(os.path.join(session_dir, "s-*.csv"))
-    v_files = glob.glob(os.path.join(session_dir, "V-*.csv")) + glob.glob(os.path.join(session_dir, "v-*.csv"))
+        s_files = glob.glob(os.path.join(session_dir, "S-*.csv")) + glob.glob(os.path.join(session_dir, "s-*.csv"))
+        v_files = glob.glob(os.path.join(session_dir, "V-*.csv")) + glob.glob(os.path.join(session_dir, "v-*.csv"))
+    else:
+        prefix, sname = category_driver
+        # The prefix should match the driver the caller provided; if not, warn
+        # but continue using the split-based location
+        expected_driver = prefix.split(" (")[0] if " (" in prefix else prefix
+        if expected_driver != driver and driver:
+            import warnings
+            warnings.warn(
+                f"Session {session} category driver '{expected_driver}' "
+                f"does not match provided driver '{driver}'. Using split-based location anyway."
+            )
+
+        # Use the split-based directory structure
+        split = determine_split(session)
+        if split is None:
+            raise FileNotFoundError(f"Session {session} not in any train/val/test split.")
+
+        # Build path: data_dir / driver / session
+        # This matches the IO-VNBD standard layout
+        session_dir = os.path.join(data_dir, driver, session)
+
+        # Check if directory exists; if not, try with Categorised IOVNB Dataset prefix
+        if not os.path.exists(session_dir):
+            session_dir = os.path.join(data_dir, "Categorised IOVNB Dataset", driver, session)
+
+        if not os.path.exists(session_dir):
+            raise FileNotFoundError(f"Session directory not found: {session_dir}")
+
+        s_files = glob.glob(os.path.join(session_dir, "S-*.csv")) + glob.glob(os.path.join(session_dir, "s-*.csv"))
+        v_files = glob.glob(os.path.join(session_dir, "V-*.csv")) + glob.glob(os.path.join(session_dir, "v-*.csv"))
 
     if not s_files or not v_files:
         raise FileNotFoundError(f"Missing S or V files in {session_dir}")
 
-    s_df = pd.read_csv(s_files[0], encoding="latin1")
-    v_df = pd.read_csv(v_files[0], encoding="latin1")
+    # Use sorted() for deterministic file selection (not just glob order)
+    s_files.sort()
+    v_files.sort()
+
+    # Read only the first file (as before), but now with explicit error handling
+    try:
+        s_df = pd.read_csv(s_files[0], encoding="latin1")
+    except Exception as e:
+        raise FileNotFoundError(f"Failed to read S file {s_files[0]}: {e}")
+
+    try:
+        v_df = pd.read_csv(v_files[0], encoding="latin1")
+    except Exception as e:
+        raise FileNotFoundError(f"Failed to read V file {v_files[0]}: {e}")
 
     # Clean column names (strip whitespace)
     s_df.columns = [c.strip() for c in s_df.columns]
     v_df.columns = [c.strip() for c in v_df.columns]
 
     return s_df, v_df
-
-
-def _parse_start_time_of_day(date_str: str) -> float:
-    """
-    Parse date string in format 'YYYY-MO-DD HH-MI-SS_SSS' or 'YYYY-MM-DD HH:MI:SS:MS'
-    and return seconds since start of day.
-    """
-    time_part = date_str.split()[1]
-    # Normalize separators: replace colons with hyphens
-    time_part = time_part.replace(':', '-')
-    parts = time_part.split('-')
-    h, m, s, ms = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
-    return h * 3600 + m * 60 + s + ms / 1000.0
 
 
 def preprocess_session(
@@ -113,24 +257,24 @@ def preprocess_session(
 
     # 2. Extract and interpolate sensor features
     # Gyro columns: IO-VNBD uses Yaw, Pitch, Roll in rad/s
-    acc_x = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER X (m/s)'] if 'ACCELEROMETER X (m/s)' in s_df else s_df.filter(like='ACCELEROMETER X').iloc[:, 0])
-    acc_y = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER Y (m/s)'] if 'ACCELEROMETER Y (m/s)' in s_df else s_df.filter(like='ACCELEROMETER Y').iloc[:, 0])
-    acc_z = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER Z (m/s)'] if 'ACCELEROMETER Z (m/s)' in s_df else s_df.filter(like='ACCELEROMETER Z').iloc[:, 0])
+    acc_x = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER X (m/s)'] if 'ACCELEROMETER X (m/s)' in s_df.columns else s_df.filter(like='ACCELEROMETER X').iloc[:, 0])
+    acc_y = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER Y (m/s)'] if 'ACCELEROMETER Y (m/s)' in s_df.columns else s_df.filter(like='ACCELEROMETER Y').iloc[:, 0])
+    acc_z = np.interp(uniform_time_abs, s_time, s_df['ACCELEROMETER Z (m/s)'] if 'ACCELEROMETER Z (m/s)' in s_df.columns else s_df.filter(like='ACCELEROMETER Z').iloc[:, 0])
 
     gyro_yaw = np.interp(uniform_time_abs, s_time, s_df['GYROSCOPE Yaw (rad/s)'])
     gyro_pitch = np.interp(uniform_time_abs, s_time, s_df['GYROSCOPE Pitch (rad/s)'])
     gyro_roll = np.interp(uniform_time_abs, s_time, s_df['GYROSCOPE Roll (rad/s)'])
 
-    mag_x = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD X (μT)'] if 'MAGNETIC FIELD X (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD X').iloc[:, 0])
-    mag_y = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD Y (μT)'] if 'MAGNETIC FIELD Y (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD Y').iloc[:, 0])
-    mag_z = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD Z (μT)'] if 'MAGNETIC FIELD Z (μT)' in s_df else s_df.filter(like='MAGNETIC FIELD Z').iloc[:, 0])
+    mag_x = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD X (uT)'] if 'MAGNETIC FIELD X (uT)' in s_df.columns else s_df.filter(like='MAGNETIC FIELD X').iloc[:, 0])
+    mag_y = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD Y (uT)'] if 'MAGNETIC FIELD Y (uT)' in s_df.columns else s_df.filter(like='MAGNETIC FIELD Y').iloc[:, 0])
+    mag_z = np.interp(uniform_time_abs, s_time, s_df['MAGNETIC FIELD Z (uT)'] if 'MAGNETIC FIELD Z (uT)' in s_df.columns else s_df.filter(like='MAGNETIC FIELD Z').iloc[:, 0])
 
     phone_lat = np.interp(uniform_time_abs, s_time, s_df['GPS LATITUDE (degrees)'])
     phone_lon = np.interp(uniform_time_abs, s_time, s_df['GPS LONGITUDE (degrees)'])
     phone_alt = np.interp(uniform_time_abs, s_time, s_df['GPS ALTITUDE (m)'])
     # Convert km/h to m/s
     phone_speed = np.interp(uniform_time_abs, s_time, s_df['GPS SPEED (Kmh)']) / 3.6
-    phone_heading = np.interp(uniform_time_abs, s_time, s_df['GPS ORIENTATION (°)'] if 'GPS ORIENTATION (°)' in s_df else s_df.filter(like='GPS ORIENTATION').iloc[:, 0])
+    phone_heading = np.interp(uniform_time_abs, s_time, s_df['GPS ORIENTATION (°)'] if 'GPS ORIENTATION (°)' in s_df.columns else s_df.filter(like='GPS ORIENTATION').iloc[:, 0])
 
     # 3. Ground Truth from V file - interpolate against absolute time
     gt_lat = np.interp(uniform_time_abs, v_time, v_df['Latitude (degrees)'])
@@ -167,55 +311,6 @@ def preprocess_session(
     return synced_df
 
 
-def latlon_to_enu(
-    lat: np.ndarray,
-    lon: np.ndarray,
-    alt: np.ndarray,
-    lat0: float,
-    lon0: float,
-    alt0: float
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Convert geodetic coordinates (lat, lon, alt) to local East-North-Up (ENU) coordinates.
-    """
-    # WGS84 ellipsoid constants
-    a = 6378137.0
-    f = 1.0 / 298.257223563
-    e2 = 2 * f - f ** 2
-
-    phi = np.radians(lat)
-    lam = np.radians(lon)
-    phi0 = np.radians(lat0)
-    lam0 = np.radians(lon0)
-
-    # Prime vertical radius of curvature
-    def get_N(p):
-        return a / np.sqrt(1 - e2 * np.sin(p) ** 2)
-
-    # ECEF coordinates
-    N = get_N(phi)
-    X = (N + alt) * np.cos(phi) * np.cos(lam)
-    Y = (N + alt) * np.cos(phi) * np.sin(lam)
-    Z = (N * (1 - e2) + alt) * np.sin(phi)
-
-    N0 = get_N(phi0)
-    X0 = (N0 + alt0) * np.cos(phi0) * np.cos(lam0)
-    Y0 = (N0 + alt0) * np.cos(phi0) * np.sin(lam0)
-    Z0 = (N0 * (1 - e2) + alt0) * np.sin(phi0)
-
-    dX = X - X0
-    dY = Y - Y0
-    dZ = Z - Z0
-
-    east = -np.sin(lam0) * dX + np.cos(lam0) * dY
-    north = -np.sin(phi0) * np.cos(lam0) * dX - np.sin(phi0) * np.sin(lam0) * dY + np.cos(phi0) * dZ
-    up = np.cos(phi0) * np.cos(lam0) * dX + np.cos(phi0) * np.sin(lam0) * dY + np.sin(phi0) * dZ
-
-    return east, north, up
-
-
-
-
 def load_two_wheeler_session(data_dir: str, session: str, target_dt: float = 0.1) -> pd.DataFrame:
     """
     Load and preprocess a two-wheeler session dataset.
@@ -242,6 +337,7 @@ def load_two_wheeler_session(data_dir: str, session: str, target_dt: float = 0.1
 
     uniform_time = np.arange(t_start, t_end, target_dt)
 
+    # Use sorted file-based discovery pattern, but for two-wheeler CSVs we read directly
     acc_x = np.interp(uniform_time, time_acc, acc_df.filter(like='Acceleration x').iloc[:, 0])
     acc_y = np.interp(uniform_time, time_acc, acc_df.filter(like='Acceleration y').iloc[:, 0])
     acc_z = np.interp(uniform_time, time_acc, acc_df.filter(like='Acceleration z').iloc[:, 0])

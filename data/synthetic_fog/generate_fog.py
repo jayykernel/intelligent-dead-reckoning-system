@@ -12,26 +12,13 @@ Explicitly labeled as SYNTHETIC data for Phase 12 validation (no claim of real F
 """
 
 import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 import numpy as np
 from scipy.interpolate import interp1d
-import sys
-
-def latlon_to_enu(lat, lon, alt, lat0, lon0, alt0):
-    a = 6378137.0
-    f = 1 / 298.257223563
-    e2 = 2 * f - f**2
-    dlat = np.radians(lat - lat0)
-    dlon = np.radians(lon - lon0)
-    dalt = alt - alt0
-    lat0_rad = np.radians(lat0)
-
-    R_N = a / np.sqrt(1 - e2 * np.sin(lat0_rad)**2)
-    R_M = a * (1 - e2) / (1 - e2 * np.sin(lat0_rad)**2)**1.5
-
-    e = dlon * (R_N + alt0) * np.cos(lat0_rad)
-    n = dlat * (R_M + alt0)
-    u = dalt
-    return e, n, u
+from engine.config.constants import GRAVITY_MS2
+from training.data_loader import latlon_to_enu
 
 def generate_synthetic_fog_dataset(
     source_npz_path: str = "data/processed/S (Driver A)/S1/S1_synced.npz",
@@ -72,10 +59,10 @@ def generate_synthetic_fog_dataset(
     a_n = np.gradient(v_n, dt)
     a_u = np.gradient(v_u, dt)
 
-    # Specific force in Nav frame (f = a - g, where g = [0, 0, -9.80665])
+    # Specific force in Nav frame (f = a - g, where g = [0, 0, -GRAVITY_MS2])
     f_e = a_e
     f_n = a_n
-    f_u = a_u + 9.80665
+    f_u = a_u + GRAVITY_MS2
 
     # 2. Convert to vehicle frame
     # Vehicle X = Right, Y = Forward, Z = Up
