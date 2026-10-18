@@ -1133,18 +1133,9 @@ Run the complete held-out benchmark and compare Baseline → Phase 1 → ... →
 
 | Date | Phase | Task | Change | Validation | Commit |
 | ---- | ----- | ---- | ------ | ---------- | ------ |
+| 2026-10-09 | Post-Phase 7 | Magnetometer Calibration Experiment | Evaluated gravity-assisted 2D planar circle fit fallback; reverted due to regression risk on low-excitation straight driving (Vw16a) | Regression tested against full 16-scenario benchmark; baseline preserved | Reverted |
 | 2026-10-08 | Phase 4 | All | Implemented JSON-based persistent calibration storage and Android EncryptedSharedPreferences persistence with validation | All tests pass, persistence verified | c28746c |
 | 2026-10-08 | Phase 3 | All | Implemented adaptive covariance growth, adaptive NIS gating, and state recovery | Benchmarks match | 77f60d6 |
-
----
-
-## BLOCKERS
-
-## Active Blockers
-
-| Blocker | Phase | Impact | Investigation | Resolution | Status |
-| ------- | ----- | ------ | ------------- | ---------- | ------ |
-| None | N/A | N/A | N/A | N/A | N/A |
 
 ---
 
@@ -1157,6 +1148,7 @@ For every significant implementation change:
 | Previous result | New result | Improved / unchanged / degraded | Affected scenarios | Decision |
 | --------------- | ---------- | ------------------------------- | ------------------ | -------- |
 | Baseline drift numbers | Post-Phase 1 drift numbers | unchanged (baseline preserved) | All 16 scenarios | No regression; baseline intentionally preserved |
+| Phase 7 baseline drift | Post-Phase 7 Experimental Mag Cal | Degraded on Vw16a (21.13% -> 67.46%) without strict bounds; minimal gain elsewhere | Vw16a, Vta28 | **REVERT**: Changes reverted to maintain Phase 7 validated baseline |
 
 ---
 

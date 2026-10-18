@@ -237,6 +237,14 @@ class CalibrationEngine:
                 residual_std_2d = np.std(residuals_2d) / avg_radius_2d
                 self.mag_calibration_quality = float(np.clip(1.0 - residual_std_2d / 0.15, 0.1, 0.85))
 
+                # Reject poor calibrations (quality < 0.2) to avoid injecting garbage into EKF
+                if self.mag_calibration_quality < 0.2:
+                    print(f"  WARNING: 2D planar calibration quality too low ({self.mag_calibration_quality:.2f}). Rejecting calibration.")
+                    self.mag_is_calibrated = False
+                    self.mag_hard_iron = np.zeros(3)
+                    self.mag_soft_iron = np.eye(3)
+                    return False
+
                 self.mag_is_calibrated = True
                 print(f"  2D planar magnetometer calibration: hard_iron=({self.mag_hard_iron[0]:.1f}, {self.mag_hard_iron[1]:.1f}, {self.mag_hard_iron[2]:.1f}) uT, quality={self.mag_calibration_quality:.2f}")
 

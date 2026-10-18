@@ -157,9 +157,20 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
 
             if ai_speed is not None and speed_2d > min_speed and ai_speed > 1.0 and yaw_rate < 0.3:
                 ratio = speed_2d / ai_speed
-                clip_min = 0.05 if self.current_vehicle_type == "two_wheeler" else 0.2
-                clip_max = 5.0 if self.current_vehicle_type == "two_wheeler" else 3.0
+                # Vehicle-specific clipping bounds
+                # Cars: [0.5, 2.0] - physically realistic
+                # Two-wheelers: [0.1, 3.0] - wider because AI model is car-trained and may underpredict TW speeds
+                if self.current_vehicle_type == "two_wheeler":
+                    clip_min = 0.1
+                    clip_max = 3.0
+                else:
+                    clip_min = 0.5
+                    clip_max = 2.0
                 ratio_clipped = float(np.clip(ratio, clip_min, clip_max))
+
+                # Outlier rejection: skip update if ratio change is too abrupt (more than 50% change from current speed_scale)
+                if abs(ratio_clipped - getattr(self, 'speed_scale', 1.0)) > 0.5:
+                    ratio_clipped = getattr(self, 'speed_scale', 1.0)
 
                 if not hasattr(self, '_speed_ratio_history'):
                     self._speed_ratio_history = []
@@ -643,7 +654,9 @@ def evaluate_edge_fog_session():
     p0 = gps_pos[0]
     v0 = gps_vel[0]
     heading0 = np.degrees(np.arctan2(v0[0], v0[1])) % 360
-    engine.initialize_state(p0, v0, heading0)
+    # Provide first 5 seconds of data (1000 samples at 200Hz) for per-unit calibration
+    calib_samples = min(1000, len(acc))
+    engine.initialize_state(p0, v0, heading0, acc_raw=acc[:calib_samples], gyro_raw=gyro[:calib_samples], speed_samples=np.linalg.norm(gps_vel[:calib_samples, :2], axis=1), dt=dt)
 
     # Road network and Map Matcher disabled to measure pure FOG integration
     edge_matcher = None
