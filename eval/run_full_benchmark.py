@@ -161,15 +161,15 @@ class ProductionMobileFusionEngine(GNSSINSFusionEngine):
                 # Cars: [0.5, 2.0] - physically realistic
                 # Two-wheelers: [0.1, 3.0] - wider because AI model is car-trained and may underpredict TW speeds
                 if self.current_vehicle_type == "two_wheeler":
-                    clip_min = 0.1
-                    clip_max = 3.0
+                    clip_min = 0.7
+                    clip_max = 1.5
                 else:
-                    clip_min = 0.5
-                    clip_max = 2.0
+                    clip_min = 0.7
+                    clip_max = 1.3
                 ratio_clipped = float(np.clip(ratio, clip_min, clip_max))
 
-                # Outlier rejection: skip update if ratio change is too abrupt (more than 50% change from current speed_scale)
-                if abs(ratio_clipped - getattr(self, 'speed_scale', 1.0)) > 0.5:
+                # Outlier rejection: skip update if ratio change is too abrupt (more than 20% change)
+                if abs(ratio_clipped - getattr(self, 'speed_scale', 1.0)) > 0.2:
                     ratio_clipped = getattr(self, 'speed_scale', 1.0)
 
                 if not hasattr(self, '_speed_ratio_history'):
