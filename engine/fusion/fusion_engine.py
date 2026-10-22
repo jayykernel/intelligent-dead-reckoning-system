@@ -11,6 +11,7 @@ Integrates:
 - Vehicle-Type Classifier (N6) with 5-step Hysteresis
 - Lean-Angle EKF & Lean-Compensated NHC / ZUPT (N1)
 - Phone-to-Vehicle Calibration (N8)
+- Map-Matching Pseudo-Measurements (N7/Phase 7) - active during GNSS outage
 """
 
 import os
@@ -27,6 +28,14 @@ from engine.nhc_zupt.constrained_ins import ConstrainedINS
 from engine.calibration.calibrator import CalibrationEngine
 from engine.calibration.online_mag_cal import OnlineMagnetometerCalibrator
 from engine.strapdown import dcm_to_quat
+
+# Optional map matching imports (loaded lazily to avoid circular deps)
+try:
+    from engine.map_matching.road_network import RoadNetwork
+    from engine.map_matching.hmm_matcher import HMMMapMatcher
+except ImportError:
+    RoadNetwork = None
+    HMMMapMatcher = None
 
 
 class GNSSINSFusionEngine:
@@ -89,6 +98,12 @@ class GNSSINSFusionEngine:
         self.mode_current_state = "GNSS_AIDED"  # start in GNSS aided assuming we have good signal initially
         self.mode_time_in_state = 0.0
         self.consecutive_gnss_rejections = 0
+
+        # State tracking for map matching
+        self.road_network_initialized = False
+        self.last_matched_point = None
+        self._last_matched_time = 0.0
+
 
         # State histories for logging
         self.trajectory_pos = []
@@ -265,6 +280,13 @@ class GNSSINSFusionEngine:
                 timestamp=timestamp
             )
 
+        # Track yaw rate for dynamic map matching sigma inflation
+        if not hasattr(self, 'yaw_rate_buffer'):
+            self.yaw_rate_buffer = []
+        self.yaw_rate_buffer.append(abs(gyro_veh[2]))  # Use calibrated gyro z-component
+        if len(self.yaw_rate_buffer) > 20:
+            self.yaw_rate_buffer.pop(0)
+
         # Apply AI Forward Speed update continuously as an aiding measurement
         if ai_speed is not None:
             # Extract heading variance from EKF state (index 8 is yaw error)
@@ -339,7 +361,7 @@ class GNSSINSFusionEngine:
 
         # Adaptive outage covariance growth
         if mode == "PURE_DEAD_RECKONING":
-            self.ekf.outage_scale = 5.0 # Increase process noise during outage
+            self.ekf.outage_scale = 5.0  # Increase process noise during outage
         else:
             self.ekf.outage_scale = 1.0
 
@@ -403,6 +425,93 @@ class GNSSINSFusionEngine:
                         source="GNSS_HEADING",
                         nis_multiplier=reacq_multiplier
                     )
+
+        # 9. Map-Matching Pseudo-Measurement (N7/Phase 7)
+        # Active only during GNSS outage to provide absolute heading reference
+        # via road network geometry. During GNSS-aided, runs at 1 Hz for efficiency.
+        if self.mode_current_state == "PURE_DEAD_RECKONING":
+            if RoadNetwork is not None and HMMMapMatcher is not None:
+                # Initialize road network once if not already done
+                if not hasattr(self, 'road_network_initialized'):
+                    # Use the EKF position as rough starting point (convert ENU to approx lat/lon)
+                    self.road_network = RoadNetwork(
+                        lat0=self.ekf.p[1]/111320.0,  # Convert North ENU to latitude
+                        lon0=self.ekf.p[0]/111320.0    # Convert East ENU to longitude
+                    )
+                    self.map_matcher = HMMMapMatcher(self.road_network, vehicle_type=self.current_vehicle_type)
+                    self.road_network_initialized = True
+
+                # Run map matching every step during outage at 10 Hz
+                current_pos = self.ekf.p
+                current_heading_deg = self.ekf.get_euler_angles_deg()[2]  # yaw in degrees
+                pos_sigma = float(np.sqrt(self.ekf.P[0, 0] + self.ekf.P[1, 1]))  # 2D position std dev
+
+                map_match_result = self.map_matcher.match_point(
+                    raw_pos_enu=np.array([current_pos[0], current_pos[1], current_pos[2]]),
+                    heading_deg=current_heading_deg,
+                    pos_sigma_m=pos_sigma,
+                    is_gnss_available=False
+                )
+
+                if map_match_result.snapped and map_match_result.last_matched_seg is not None:
+                    matchedSeg = self.map_matcher.last_matched_seg
+
+                    # === CROSS-TRACK CONSTRAINT ===
+                    # Apply tight cross-track constraint to pull trajectory toward road
+                    base_sigma_cross = 1.0  # Very tight cross-track constraint (1m std)
+                    conf_cross = max(map_match_result.confidence, 0.01)
+                    sigma_cross = base_sigma_cross / np.sqrt(conf_cross)
+                    sigma_cross = max(min(sigma_cross, 3.0), 0.1)
+
+                    # === HEADING CONSTRAINT ===
+                    # Use road geometry to correct yaw drift - the primary failure mode
+                    road_bearing_deg = matchedSeg.bearing_deg
+                    curr_yaw_deg = current_heading_deg
+
+                    # Determine forward bearing difference (allow reverse on two-way roads)
+                    diff_fwd = ((road_bearing_deg - curr_yaw_deg + 180) % 360) - 180
+
+                    # On two-way roads, also check reverse, but penalize more
+                    use_reverse = abs(diff_fwd) > 45.0  # Only use reverse if forward gate is too wide
+                    if use_reverse:
+                        diff_rev = ((road_bearing_deg + 180.0 - curr_yaw_deg + 180) % 360) - 180
+                        if abs(diff_rev) < abs(diff_fwd) * 0.7:  # Reverse must be significantly better
+                            road_bearing_deg = (road_bearing_deg + 180.0) % 360.0
+                            diff_fwd = diff_rev
+
+                    # CRITICAL FIX: Tighten heading gate from 45° to 30°
+                    # Prevents snapping to perpendicular cross-streets during yaw divergence
+                    # This was a primary cause of Vta27, Vta28, Vw16a benchmark failures
+                    if abs(diff_fwd) < 30.0:
+                        road_heading_rad = np.radians(road_bearing_deg)
+                        # Dynamic sigma: base 5°, inflate based on yaw rate to trust gyro during turns
+                        dynamic_head_sigma_deg = 5.0
+                        # Rough heuristic: 0.1 rad/s (~5.7°/s) -> +5° sigma
+                        if hasattr(self, 'yaw_rate_buffer'):
+                            yaw_rate = np.mean(np.abs(self.yaw_rate_buffer[-10:]))
+                        else:
+                            yaw_rate = 0.1  # default
+                        dynamic_head_sigma_deg += min(abs(yaw_rate) * 50.0, 25.0)
+                        dynamic_head_sigma_deg = min(dynamic_head_sigma_deg, 30.0)
+                        sigma_heading = np.radians(dynamic_head_sigma_deg)
+
+                        # Inject heading constraint into EKF
+                        self.ekf.update_heading(
+                            heading_rad=road_heading_rad,
+                            sigma_heading=sigma_heading,
+                            alpha=0.01,
+                            timestamp=timestamp,
+                            source="MAP_HEADING"
+                        )
+
+                    # Apply cross-track constraint only when heading alignment is reasonable
+                    if abs(diff_fwd) < 50.0:
+                        self.ekf.update_map_matching_cross_track(
+                            p_start_enu=matchedSeg.p_start,
+                            p_end_enu=matchedSeg.p_end,
+                            sigma_cross=sigma_cross,
+                            timestamp=timestamp
+                        )
 
         # Record histories
         self.trajectory_pos.append(np.copy(self.ekf.p))

@@ -6,7 +6,6 @@ using gyro roll rates and specific force / kinematic-based lean inference.
 """
 
 import numpy as np
-from scipy import signal
 
 
 class LeanAngleEKF:
@@ -23,13 +22,30 @@ class LeanAngleEKF:
         self.R = r_meas
 
         # Vibration notch filter for two-wheeler engine harmonics (10-20 Hz)
-        # Design a second-order notch filter at 15 Hz with Q-factor of 5
         self.notch_freq = 15.0  # Hz
         self.notch_q = 5.0      # Quality factor
         fs = 1.0 / dt
+
         if fs > 2.0 * self.notch_freq:
-            self.notch_b, self.notch_a = signal.iirnotch(self.notch_freq, self.notch_q, fs)
-            self.notch_state = signal.lfilter_zi(self.notch_b, self.notch_a) * 0.0
+            # Manual IIR Notch Filter Design (replacing scipy.signal.iirnotch)
+            # w0 = 2 * pi * f0 / fs
+            w0 = 2.0 * np.pi * self.notch_freq / fs
+            # beta = w0 / (2 * Q)
+            beta = w0 / (2.0 * self.notch_q)
+
+            # Coefficients:
+            # b = [1, -2*cos(w0), 1]
+            # a = [1 + beta, -2*cos(w0), 1 - beta]
+            cos_w0 = np.cos(w0)
+            self.notch_b = np.array([1.0, -2.0 * cos_w0, 1.0])
+            self.notch_a = np.array([1.0 + beta, -2.0 * cos_w0, 1.0 - beta])
+
+            # Normalize by a[0]
+            self.notch_b /= self.notch_a[0]
+            self.notch_a /= self.notch_a[0]
+
+            # Filter state [x[n-1], x[n-2], y[n-1], y[n-2]]
+            self.notch_state = np.zeros(4)
             self._use_notch = True
         else:
             self._use_notch = False
@@ -58,13 +74,28 @@ class LeanAngleEKF:
         self.P = 0.5 * (self.P + self.P.T)
 
     def _apply_notch_filter(self, acc_x: float) -> float:
-        """Apply notch filter to remove engine vibration from lateral acceleration."""
+        """Apply notch filter to remove engine vibration from lateral acceleration.
+        Implements a Direct Form II Transposed difference equation.
+        """
         if not getattr(self, '_use_notch', False):
             self.last_filtered_acc_x = acc_x
             return acc_x
-        y, self.notch_state = signal.lfilter(self.notch_b, self.notch_a, [acc_x], zi=self.notch_state)
-        self.last_filtered_acc_x = float(y[0])
-        return float(y[0])
+
+        # Difference equation: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
+        # notch_state: [x_n_1, x_n_2, y_n_1, y_n_2]
+        x_n = acc_x
+        x_n_1, x_n_2, y_n_1, y_n_2 = self.notch_state
+
+        y_n = (self.notch_b[0] * x_n +
+               self.notch_b[1] * x_n_1 +
+               self.notch_b[2] * x_n_2 -
+               self.notch_a[1] * y_n_1 -
+               self.notch_a[2] * y_n_2)
+
+        # Update state
+        self.notch_state = np.array([x_n, x_n_1, y_n, y_n_1])
+        self.last_filtered_acc_x = float(y_n)
+        return float(y_n)
 
     def predict(self, gyro_y: float):
         """

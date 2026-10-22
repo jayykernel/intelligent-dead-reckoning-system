@@ -98,3 +98,29 @@ class ConstrainedINS:
 
         else:
             raise ValueError(f"Unknown vehicle type: {vehicle_type}")
+
+    def get_adaptive_nhc_sigma(self, acc_veh: np.ndarray, vehicle_type: str, base_sigma_nhc_x: float = 0.2, k: float = 0.5) -> float:
+        """
+        Compute adaptive NHC sigma based on lateral acceleration.
+        During high-G turns, 'no lateral slip' is physically violated (centrifugal force).
+        We loosen the constraint (increase sigma) to prevent filter divergence.
+        
+        Args:
+            acc_veh: Vehicle-frame acceleration
+            vehicle_type: 'car' or 'two_wheeler'
+            base_sigma_nhc_x: Base sigma for lateral velocity constraint
+            k: Scaling factor (m/s^2)^-1
+            
+        Returns:
+            Adaptive sigma_nhc_x
+        """
+        lateral_acc = abs(acc_veh[0])  # x is lateral in vehicle frame
+        
+        # Adaptive scaling: sigma = base * (1 + k * |a_lat|)
+        # At 0 m/s^2 lateral: sigma = base
+        # At 2 m/s^2 lateral: sigma = base * (1 + 2k)
+        # At 5 m/s^2 lateral: sigma = base * (1 + 5k)
+        adaptive_sigma = base_sigma_nhc_x * (1.0 + k * lateral_acc)
+        
+        # Cap to reasonable bounds
+        return min(max(adaptive_sigma, base_sigma_nhc_x), 5.0)

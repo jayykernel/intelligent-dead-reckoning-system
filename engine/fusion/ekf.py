@@ -21,7 +21,6 @@ Features:
 
 import numpy as np
 from typing import Dict, Tuple, Optional, List
-from scipy.stats import chi2
 from engine.config.constants import (
     GRAVITY_MS2,
     SIGMA_ACC,
@@ -57,6 +56,9 @@ class ErrorStateEKF:
         self.sigma_gyro_bias = sigma_gyro_bias
         self.gyro_mag_scale = 2.0  # Scale factor for dynamic gyro noise (0.0 for FOG-grade)
         self.outage_scale = 1.0    # Outage covariance scaling factor (1.0 = nominal)
+        # State-dependent outage scaling (Task 5: covariance tuning)
+        self.outage_scale_heading = 1.0  # Separate scaling for attitude states
+        self.time_since_gnss = 0.0       # Track time since last GNSS update
 
         # Nominal states
         self.p = np.zeros(3)  # Position ENU
@@ -137,23 +139,40 @@ class ErrorStateEKF:
         """Enforce symmetry and apply eigenvalue flooring to covariance matrix."""
         if not np.all(np.isfinite(self.P)):
             raise ValueError("NaN/Inf in covariance before positive-definite check")
-        
+
         # Symmetrize
         self.P = 0.5 * (self.P + self.P.T)
-        
+
         # Eigenvalue decomposition
         try:
             w, v = np.linalg.eigh(self.P)
         except np.linalg.LinAlgError:
             self.P = np.eye(15) * epsilon
             return
-            
+
         # Eigenvalue flooring
         w_clipped = np.maximum(w, epsilon)
-        
+
         # Reconstruct
         self.P = v @ np.diag(w_clipped) @ v.T
         self.P = 0.5 * (self.P + self.P.T)
+
+    def _get_chi2_thresh(self, alpha: float, dof: int) -> float:
+        """
+        Lookup table for Chi-squared critical values since scipy is unavailable.
+        Supports alpha=0.01 (99%) and alpha=0.05 (95%) for dof 1-3.
+        """
+        # Critical values for chi2.ppf(1 - alpha, df)
+        lookup = {
+            0.01: {1: 6.635, 2: 9.210, 3: 11.345},
+            0.05: {1: 3.841, 2: 5.991, 3: 7.815}
+        }
+
+        # Fallback to 0.01 if alpha not in table
+        a = alpha if alpha in lookup else 0.01
+
+        # Return value for dof, or estimate based on df=3 if larger
+        return lookup[a].get(dof, lookup[a][3] + (dof - 3) * 2.0)
 
     def predict(self, acc_raw: np.ndarray, gyro_raw: np.ndarray, dt: Optional[float] = None, Q_scale: float = 1.0):
         """
@@ -236,14 +255,37 @@ class ErrorStateEKF:
         Q[9:12, 9:12] = np.eye(3) * (self.sigma_acc_bias**2 * dt)
         Q[12:15, 12:15] = np.eye(3) * (self.sigma_gyro_bias**2 * dt)
 
-        # Apply outage covariance scaling: increase process noise during GNSS outage
-        Q = Q * self.outage_scale
+        # State-dependent outage covariance scaling
+        # Heading (attitude) needs more uncertainty growth during outage; velocity less (NHC holds)
+        outage_scale_heading = self.outage_scale * self.outage_scale_heading
+        Q[0:3, 0:3] *= self.outage_scale       # Position
+        Q[3:6, 3:6] *= self.outage_scale       # Velocity
+        Q[6:9, 6:9] *= outage_scale_heading    # Attitude/heading - separate scaling
+        Q[9:12, 9:12] *= self.outage_scale     # Accel bias
+        Q[12:15, 12:15] *= self.outage_scale   # Gyro bias
 
         # 7. Covariance propagation
         self.P = F @ self.P @ F.T + Q
         # Enforce symmetry and positive-definiteness
         self._ensure_positive_definite()
         self._validate_state()
+
+    def update_outage_tracking(self, is_gnss_available: bool, dt: float = 0.1):
+        """
+        Update time-since-GNSS and compute state-dependent outage scaling.
+        Call this each step to track outage duration.
+        """
+        if is_gnss_available:
+            self.time_since_gnss = 0.0
+            self.outage_scale = 1.0
+            self.outage_scale_heading = 1.0
+        else:
+            self.time_since_gnss += dt
+            # Heading uncertainty grows with time^1.5 (empirical for MEMS gyro bias integration)
+            # Cap at 100x to prevent numerical issues
+            self.outage_scale_heading = min(1.0 + 0.5 * (self.time_since_gnss ** 1.5), 100.0)
+            # Position/velocity grow linearly with time (drift, not runaway)
+            self.outage_scale = min(1.0 + 0.1 * self.time_since_gnss, 10.0)
 
     def update(
         self,
@@ -292,7 +334,7 @@ class ErrorStateEKF:
             nis = float(y.T @ S_inv @ y)
 
         dof = len(z)
-        chi2_thresh = float(chi2.ppf(1.0 - alpha, df=dof)) * nis_multiplier
+        chi2_thresh = float(self._get_chi2_thresh(alpha, dof)) * nis_multiplier
         passed = nis <= chi2_thresh
 
         # Log NIS event
@@ -588,15 +630,28 @@ class ErrorStateEKF:
         sigma_nhc_x: float = 0.2,
         sigma_nhc_z: float = 0.2,
         alpha: float = 0.01,
-        timestamp: float = 0.0
+        timestamp: float = 0.0,
+        acc_veh: Optional[np.ndarray] = None
     ) -> Tuple[bool, float, float]:
         """
         Non-Holonomic Constraints (NHC) measurement update.
         For Car: lateral (X) and vertical (Z) velocities in vehicle frame are 0.
         For Two-Wheeler: lateral (X) and vertical (Z) velocities in lean-compensated road frame are 0 (N1).
+
+        Adaptive NHC: sigma_nhc_x is scaled based on lateral acceleration to prevent
+        filter divergence during high-G turns where 'no lateral slip' is physically violated.
         """
         R = self.quat_to_rot(self.q)
         v_veh = R.T @ self.v
+
+        # Adaptive NHC sigma: scale based on lateral acceleration
+        # During high-G turns, the 'no lateral slip' constraint is physically violated
+        # (centrifugal force), so we loosen the constraint (increase sigma) to prevent divergence
+        if acc_veh is not None:
+            lateral_acc = abs(acc_veh[0])  # x is lateral in vehicle frame
+            k = 0.5  # empirical scaling factor (m/s^2)^-1
+            sigma_nhc_x_adaptive = sigma_nhc_x * (1.0 + k * lateral_acc)
+            sigma_nhc_x = min(max(sigma_nhc_x_adaptive, sigma_nhc_x), 5.0)
 
         if vehicle_type == "two_wheeler" and abs(lean_angle_rad) > 1e-4:
             phi = lean_angle_rad

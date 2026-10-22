@@ -9,9 +9,28 @@ import os
 import json
 import numpy as np
 from typing import List, Dict, Tuple, Optional
-from scipy.spatial import KDTree
 
 from training.data_loader import latlon_to_enu
+
+
+class SimpleKDTree:
+    """
+    Lightweight KDTree replacement for 2D points using numpy.
+    Supports query_ball_point for range search.
+    """
+    def __init__(self, data: np.ndarray):
+        """data: (N, 2) array of [E, N] coordinates"""
+        self.data = np.asarray(data)
+        self.n = len(self.data)
+
+    def query_ball_point(self, pt: np.ndarray, r: float) -> List[int]:
+        """Find all points within radius r of pt (2,)."""
+        if self.n == 0:
+            return []
+        # Vectorized distance computation
+        diff = self.data - pt
+        dists_sq = np.sum(diff * diff, axis=1)
+        return np.where(dists_sq <= r * r)[0].tolist()
 
 
 class RoadSegment:
@@ -136,7 +155,7 @@ class RoadNetwork:
         if not self.segments:
             return
         self.midpoints = np.array([seg.midpoint for seg in self.segments])
-        self.kdtree = KDTree(self.midpoints)
+        self.kdtree = SimpleKDTree(self.midpoints)
 
     def find_candidate_segments(
         self,
