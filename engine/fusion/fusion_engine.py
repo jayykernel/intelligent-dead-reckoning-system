@@ -46,11 +46,13 @@ class GNSSINSFusionEngine:
         class_model_path: str = "training/models/vehicle_classifier.tflite",
         enable_ai: bool = True,
         default_vehicle_type: str = "car",
-        enable_online_mag_cal: bool = True
+        enable_online_mag_cal: bool = True,
+        k: float = 100.0  # Covariance scaling factor for dynamic AI speed variance (heading-dependent)
     ):
         self.dt = dt
         self.enable_ai = enable_ai
         self.enable_online_mag_cal = enable_online_mag_cal
+        self.k = k
 
         # Core EKF with smartphone tuning
         self.ekf = ErrorStateEKF(
@@ -277,7 +279,8 @@ class GNSSINSFusionEngine:
                 sigma_nhc_x=0.2,
                 sigma_nhc_z=0.2,
                 alpha=0.01,
-                timestamp=timestamp
+                timestamp=timestamp,
+                acc_veh=acc_veh
             )
 
         # Track yaw rate for dynamic map matching sigma inflation
@@ -288,16 +291,22 @@ class GNSSINSFusionEngine:
             self.yaw_rate_buffer.pop(0)
 
         # Apply AI Forward Speed update continuously as an aiding measurement
+        # Gate by heading confidence: when heading uncertainty is high, pause AI speed aiding
+        # to prevent divergence along wrong heading (Fix 4: AI Speed Gating by Heading Confidence)
         if ai_speed is not None:
             # Extract heading variance from EKF state (index 8 is yaw error)
             yaw_var_rad2 = float(self.ekf.P[8, 8])
-            self.ekf.update_ai_forward_speed(
-                speed_fwd=ai_speed,
-                sigma_speed=sigma_ai,
-                heading_uncertainty=yaw_var_rad2,
-                alpha=0.01,
-                timestamp=timestamp
-            )
+
+            # Hard gate: if yaw variance exceeds ~15 degrees (0.07 rad²), skip AI speed update
+            # This prevents injecting wrong velocity direction during heading divergence
+            if yaw_var_rad2 < 0.07:  # ~15 degrees variance
+                self.ekf.update_ai_forward_speed(
+                    speed_fwd=ai_speed,
+                    sigma_speed=sigma_ai,
+                    heading_uncertainty=yaw_var_rad2,
+                    alpha=0.01,
+                    timestamp=timestamp
+                )
 
         # Online Magnetometer Calibration (N8 Experiment) - Phase 2
         mag_cal_used = False
@@ -361,7 +370,7 @@ class GNSSINSFusionEngine:
 
         # Adaptive outage covariance growth
         if mode == "PURE_DEAD_RECKONING":
-            self.ekf.outage_scale = 5.0  # Increase process noise during outage
+            self.ekf.update_outage_tracking(is_gnss_available, self.dt)
         else:
             self.ekf.outage_scale = 1.0
 

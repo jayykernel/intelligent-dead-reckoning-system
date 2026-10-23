@@ -14,22 +14,26 @@ from matplotlib.patches import Ellipse
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from engine.fusion.mobile_engine import ProductionMobileFusionEngine
-from training.dataset import load_iovnbd_session
-from engine.calibration.calibration_engine import CalibrationEngine
+from engine.fusion.fusion_engine import GNSSINSFusionEngine
+from training.data_loader import load_iovnbd_session, preprocess_session, latlon_to_enu
+from engine.calibration.calibrator import CalibrationEngine
 from engine.map_matching.road_network import RoadNetwork, RoadSegment
-from engine.utils.transforms import latlon_to_enu
+from engine.map_matching.hmm_matcher import HMMMapMatcher
 
-def build_sparse_road_network(e_gt, n_gt, step=10):
+def build_gt_road_network(e_gt, n_gt, target_segment_length_m=10.0):
     rn = RoadNetwork(lat0=0.0, lon0=0.0)
     seg_id = 1
-    for i in range(0, len(e_gt) - step, step):
-        p1 = np.array([e_gt[i], n_gt[i]])
-        p2 = np.array([e_gt[i+step], n_gt[i+step]])
-        if np.linalg.norm(p2 - p1) < 0.5:
-            continue
-        rn.segments.append(RoadSegment(seg_id, 1000 + seg_id, p1, p2))
-        seg_id += 1
+
+    p_last = np.array([e_gt[0], n_gt[0]])
+    for i in range(1, len(e_gt)):
+        p_curr = np.array([e_gt[i], n_gt[i]])
+        dist = np.linalg.norm(p_curr - p_last)
+        if dist >= target_segment_length_m or i == len(e_gt) - 1:
+            if dist >= 0.5:
+                rn.segments.append(RoadSegment(seg_id, 1000 + seg_id, np.array([p_last[0], p_last[1], 0.0]), np.array([p_curr[0], p_curr[1], 0.0]), oneway=False))
+                seg_id += 1
+                p_last = p_curr
+
     rn._build_spatial_index()
     return rn
 
@@ -42,27 +46,25 @@ def get_ellipse_params(cov_2d, scale=3.0):
     width, height = 2 * scale * np.sqrt(np.maximum(vals, 1e-9))
     return width, height, theta
 
-def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
+def run_demo(session_name="S4", driver="S (Driver A)"):
     print(f"Loading {session_name} for GNSS Blackout Demo...")
     raw_root = "data/raw"
     s_df, v_df = load_iovnbd_session(raw_root, driver, session_name)
 
-    synced = s_df.copy()
-    synced["gt_speed"] = v_df["speed"].values
-    synced["gt_heading"] = v_df["heading"].values
+    synced = preprocess_session(s_df, v_df, target_dt=0.1)
 
     dt = 0.1
-    N = int(len(synced) / speed_scale_speedup) # Optional subsampling for quick demo, but let's run real dynamics
     N = len(synced)
 
     acc = synced[["acc_x", "acc_y", "acc_z"]].values
     gyro = synced[["gyro_x", "gyro_y", "gyro_z"]].values
-    speed = np.nan_to_num(synced["gt_speed"].values, nan=0.0)
+    speed = synced["gt_speed"].values
     mag = synced[["mag_x", "mag_y", "mag_z"]].values if "mag_x" in synced.columns else None
 
     # Calibration on initial segment
     calib = CalibrationEngine()
     calib.calibrate_from_session(acc[:1200], gyro[:1200], speed[:1200], dt=dt)
+    calib.calibrate_magnetometer(mag[:1200])
 
     lat0 = synced["gt_lat"].iloc[0]
     lon0 = synced["gt_lon"].iloc[0]
@@ -76,11 +78,11 @@ def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
     heading_rad = np.radians(gt_heading[0])
     v0 = np.array([speed[0] * np.sin(heading_rad), speed[0] * np.cos(heading_rad), 0.0])
 
-    fusion = ProductionMobileFusionEngine(dt=dt, default_vehicle_type="car", k=1000.0)
+    # Use production-grade fusion engine with k=1000 covariance scaling
+    fusion = GNSSINSFusionEngine(dt=dt, default_vehicle_type="car", k=1000.0)
 
     # Map-matching integration
-    rn = build_sparse_road_network(e_gt, n_gt, step=10)
-    from engine.map_matching.hmm_matcher import HMMMapMatcher
+    rn = build_gt_road_network(e_gt, n_gt, target_segment_length_m=10.0)
     fusion.road_network = rn
     fusion.map_matcher = HMMMapMatcher(rn, vehicle_type="car")
     fusion.map_matcher.search_radius = 150.0
@@ -88,8 +90,16 @@ def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
 
     fusion.initialize_state(p0, v0, gt_heading[0], acc[0], calib.R_phone_to_veh, calib.gyro_bias, calib.accel_bias)
 
-    outage_start = 1800 if N > 3000 else int(N * 0.4)
-    outage_end = min(outage_start + int(60.0 / dt), N - int(10.0 / dt))
+    # Transfer magnetometer calibration
+    if calib.mag_is_calibrated:
+        fusion.calib.mag_hard_iron = calib.mag_hard_iron.copy()
+        fusion.calib.mag_soft_iron = calib.mag_soft_iron.copy()
+        fusion.calib.mag_is_calibrated = True
+        fusion.calib.mag_calibration_quality = calib.mag_calibration_quality
+
+    outage_start = min(int(N * 0.4), 3000)
+    outage_end = outage_start + int(60.0 / dt)
+    outage_end = min(outage_end, N - int(10.0 / dt))
 
     # For demo we will only animate the window around the outage
     demo_start = max(1, outage_start - int(30.0 / dt))
@@ -103,11 +113,6 @@ def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
         h_rad = np.radians(gt_heading[i])
         v_enu = np.array([speed[i] * np.sin(h_rad), speed[i] * np.cos(h_rad), 0.0])
         m_raw = mag[i] if mag is not None else None
-
-        # S4 speeds update
-        ai_speed = speed[i]
-        scaled_ai_speed = ai_speed * getattr(fusion, 'speed_scale', 1.0)
-        fusion.ekf.update_ai_forward_speed(scaled_ai_speed, sigma_speed=0.5, alpha=0.01, timestamp=i*dt)
 
         fusion.step(
             acc_raw=acc[i], gyro_raw=gyro[i], mag_raw=m_raw,
@@ -144,7 +149,10 @@ def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
 
         in_outage = (outage_start <= i <= outage_end)
         if i == outage_start:
-            fusion.map_matcher.reset_history()
+            if fusion.map_matcher is not None:
+                fusion.map_matcher.reset_history()
+            fusion._last_matched_point = None
+            fusion._last_matched_time = None
             gnss_xs.clear()
             gnss_ys.clear()
 
@@ -152,19 +160,6 @@ def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
         h_rad = np.radians(gt_heading[i])
         v_enu = np.array([speed[i] * np.sin(h_rad), speed[i] * np.cos(h_rad), 0.0]) if not in_outage else None
         m_raw = mag[i] if mag is not None else None
-
-        ai_speed = speed[i]
-        scaled_ai_speed = ai_speed * getattr(fusion, 'speed_scale', 1.0)
-        yaw_var = float(fusion.ekf.P[8, 8])
-        fusion.ekf.update_ai_forward_speed(scaled_ai_speed, sigma_speed=0.5*(1.0+1000.0*yaw_var), alpha=0.01, timestamp=i*dt)
-
-        # Simple Map Matcher snippet inline for demo visuals
-        if not in_outage or (in_outage and i % 10 == 0):
-            ms = fusion.map_matcher.match_point(np.array([fusion.ekf.p[0], fusion.ekf.p[1], fusion.ekf.p[2]]), np.degrees(fusion.ekf.x[8]))
-            if ms.snapped:
-                sigma_pos = 1.5 if not in_outage else 0.1/np.sqrt(max(ms.confidence, 0.01))
-                sigma_pos = max(min(sigma_pos, 5.0), 0.05)
-                fusion.ekf.update_map_matching_position(np.array([ms.snapped_pos[0], ms.snapped_pos[1], fusion.ekf.p[2]]), sigma_pos=sigma_pos)
 
         res = fusion.step(
             acc_raw=acc[i], gyro_raw=gyro[i], mag_raw=m_raw,
@@ -208,5 +203,5 @@ def run_demo(session_name="S4", driver="S (Driver A)", speed_scale_speedup=10):
     print(f"Demo successfully saved to {demo_out}")
 
 if __name__ == "__main__":
-    # Feel free to change this to any Car session (e.g. Vw_15, Vta_11) to see drift
+    # Feel free to change this to any Car session (e.g. Vw15, Vta11) to see drift
     run_demo("S4")
